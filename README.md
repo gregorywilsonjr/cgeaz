@@ -34,7 +34,8 @@ mapped to NIST CSF 2.0: [docs/CONTROLS.md](docs/CONTROLS.md).
 | `policy/` | The OPA rules the compliance gate applies to every Terraform plan |
 | `.github/workflows/` | `compliance-gate` (every pull request) and `drift-detection` (nightly) |
 | `labs/` | The course's lab guides, plus the helper scripts the deploy steps below use |
-| `docs/` | Architecture, control mappings, and the course's setup guide and rubric |
+| `docs/` | Architecture, control mappings, live evidence, and the course's setup guide and rubric |
+| `scripts/` | `capture-evidence.sh`, which regenerates the live evidence page |
 
 ## Deploy from an empty subscription
 
@@ -306,6 +307,9 @@ az storage blob list --account-name "$STG" --container-name reports --auth-mode 
 
 ## Proof points
 
+The live output behind every row is on [docs/EVIDENCE.md](docs/EVIDENCE.md), regenerated
+by [`scripts/capture-evidence.sh`](scripts/capture-evidence.sh).
+
 | Claim | Where to see it |
 |---|---|
 | The gate blocks a non-compliant plan | [PR #1](https://github.com/gregorywilsonjr/cgeaz/pull/1): a public, shared-key storage account that `storage.rego` failed, closed unmerged |
@@ -359,6 +363,9 @@ Additions:
   state resource group, so [`bootstrap.sh`](labs/03-foundation/bootstrap.sh) now
   tags it with an owner ([PR #4](https://github.com/gregorywilsonjr/cgeaz/pull/4)).
 - **Branch protection** that requires all four gate checks, for admins too.
+- **A live evidence page** ([EVIDENCE.md](docs/EVIDENCE.md)) built from real command
+  output by [`scripts/capture-evidence.sh`](scripts/capture-evidence.sh). The script
+  redacts personal identifiers and refuses to write the page if any slip through.
 - **This README and [ARCHITECTURE.md](docs/ARCHITECTURE.md),** which covers the
   stage flow, identity boundaries, design decisions and known gaps.
 
