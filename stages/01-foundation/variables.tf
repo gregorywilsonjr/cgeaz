@@ -34,3 +34,13 @@ variable "public_blob_policy_effect" {
     error_message = "public_blob_policy_effect must be Audit, Deny, or Disabled."
   }
 }
+
+variable "cosmos_auth_policy_effect" {
+  description = "Effect for the Cosmos DB key-based-access policy (Audit while onboarding, Deny once every account is proven keyless)."
+  type        = string
+  default     = "Audit"
+  validation {
+    condition     = contains(["Audit", "Deny", "Disabled"], var.cosmos_auth_policy_effect)
+    error_message = "cosmos_auth_policy_effect must be Audit, Deny, or Disabled."
+  }
+}

@@ -1,4 +1,4 @@
-# Three policies, one initiative, assigned once at mg-grc-sandbox.
+# Four policies (three from the course starter, one of my own), one initiative, assigned once at mg-grc-sandbox.
 # Every subscription that ever joins the sandbox group inherits all of it. (CSF: GV.PO, PR.DS, PR.PS)
 
 # --- 1. Require the `env` tag on resource groups (inventory hygiene; POA&M owner resolution) ---
@@ -129,6 +129,41 @@ resource "azurerm_policy_definition" "storage_diagnostics" {
   })
 }
 
+# --- 4. (My addition) Cosmos DB accounts must not accept key-based access ---
+# The evidence store is identity-only by design; this turns that one-time setting into a watched control.
+# Rule mirrors Microsoft's built-in "Cosmos DB database accounts should have local authentication methods disabled".
+# blast radius: Audit flags only. At Deny, blocks creating or updating any Cosmos account under mg-grc-sandbox
+# that accepts keys; it cannot read data or change existing accounts.
+# rollback: set cosmos_auth_policy_effect back to "Audit" in a reviewed PR and apply. (CSF: PR.AA, PR.DS)
+
+resource "azurerm_policy_definition" "cosmos_local_auth" {
+  name                = "cge-cosmos-disable-local-auth"
+  display_name        = "Cosmos DB accounts must disable key-based (local) authentication"
+  policy_type         = "Custom"
+  mode                = "Indexed"
+  management_group_id = azurerm_management_group.sandbox.id
+
+  parameters = jsonencode({
+    effect = {
+      type          = "String"
+      allowedValues = ["Audit", "Deny", "Disabled"]
+      defaultValue  = "Audit"
+    }
+  })
+
+  policy_rule = jsonencode({
+    if = {
+      allOf = [
+        { field = "type", equals = "Microsoft.DocumentDB/databaseAccounts" },
+        { field = "Microsoft.DocumentDB/databaseAccounts/disableLocalAuth", notEquals = true },
+        # Mongo, Cassandra and Gremlin accounts handle this setting differently (same exclusion as the built-in).
+        { field = "Microsoft.DocumentDB/databaseAccounts/capabilities[*].name", notIn = ["EnableMongo", "EnableCassandra", "EnableGremlin"] }
+      ]
+    }
+    then = { effect = "[parameters('effect')]" }
+  })
+}
+
 # --- The initiative: one assignment, whole-sandbox inheritance ---
 
 resource "azurerm_management_group_policy_set_definition" "grc_baseline" {
@@ -141,6 +176,7 @@ resource "azurerm_management_group_policy_set_definition" "grc_baseline" {
     tagEffect        = { type = "String", defaultValue = "Audit" }
     publicBlobEffect = { type = "String", defaultValue = "Deny" }
     workspaceId      = { type = "String" }
+    cosmosAuthEffect = { type = "String", defaultValue = "Audit" }
   })
 
   policy_definition_reference {
@@ -163,6 +199,13 @@ resource "azurerm_management_group_policy_set_definition" "grc_baseline" {
       workspaceId = { value = "[parameters('workspaceId')]" }
     })
   }
+
+  policy_definition_reference {
+    policy_definition_id = azurerm_policy_definition.cosmos_local_auth.id
+    parameter_values = jsonencode({
+      effect = { value = "[parameters('cosmosAuthEffect')]" }
+    })
+  }
 }
 
 resource "azurerm_management_group_policy_assignment" "grc_baseline" {
@@ -176,6 +219,7 @@ resource "azurerm_management_group_policy_assignment" "grc_baseline" {
     tagEffect        = { value = var.tag_policy_effect }
     publicBlobEffect = { value = var.public_blob_policy_effect }
     workspaceId      = { value = azurerm_log_analytics_workspace.grc.id }
+    cosmosAuthEffect = { value = var.cosmos_auth_policy_effect }
   })
 
   # Remediation effects (deployIfNotExists) execute AS this identity.
