@@ -30,6 +30,9 @@ resource "azurerm_policy_definition" "require_env_tag" {
 }
 
 # --- 2. Deny public blob access on storage accounts (clear-cut, framework-mandated: earned Deny) ---
+# blast radius: refuses any create or update that would leave a storage account under mg-grc-sandbox open to
+# public blob access, including Terraform and CLI changes; it changes nothing that already exists.
+# rollback: set public_blob_policy_effect to "Audit" in a reviewed PR and apply. (CSF: PR.DS)
 
 resource "azurerm_policy_definition" "deny_public_blob" {
   name                = "cge-deny-public-blob"
@@ -59,6 +62,9 @@ resource "azurerm_policy_definition" "deny_public_blob" {
 
 # --- 3. deployIfNotExists: storage accounts missing diagnostic settings get them, routed to the GRC workspace ---
 # Logging that enforces its own coverage. Remediation runs AS the identity in identity.tf.
+# blast radius: creates one diagnostic setting (ds-to-grc-workspace) on any storage account under mg-grc-sandbox
+# that lacks one, as the remediation identity; it never modifies or deletes anything else.
+# rollback: remove this definition from the initiative in a reviewed PR and apply; settings it created stay.
 
 resource "azurerm_policy_definition" "storage_diagnostics" {
   name                = "cge-dine-storage-diagnostics"
@@ -202,11 +208,15 @@ resource "azurerm_policy_definition" "require_owner_tag" {
 }
 
 # --- 6. (My addition) Storage accounts must require TLS 1.2 or newer ---
-# Evidence, reports and Terraform state all travel to storage accounts; old TLS versions put them at risk in transit.
+# Evidence, reports and Terraform state all travel to storage accounts. Azure Storage has refused TLS 1.0/1.1
+# platform-wide since 2026-02-03, so this checks each account's DECLARED minimum: configuration an auditor can
+# verify, instead of a platform default.
 # Differs from Microsoft's built-in on purpose: the built-in flags anything not EXACTLY TLS1_2, which would
 # wrongly flag a stricter TLS1_3 minimum. This rule flags only versions below 1.2, or no minimum set at all.
-# blast radius: Audit flags only. At Deny, blocks creating or updating any storage account under mg-grc-sandbox
-# whose minimum TLS is below 1.2 (including your own Terraform or CLI changes to such an account until it is fixed).
+# Earned Deny: every storage account passed at Audit first, and the one finding was closed before the switch.
+# blast radius: refuses creating any storage account under mg-grc-sandbox that doesn't declare TLS 1.2 or newer
+# (for example, az storage account create without --min-tls-version), and any update that would lower it.
+# Updates to accounts that already comply still go through. It changes nothing that already exists.
 # rollback: set storage_tls_policy_effect back to "Audit" in a reviewed PR and apply. (CSF: PR.DS)
 
 resource "azurerm_policy_definition" "storage_min_tls" {
