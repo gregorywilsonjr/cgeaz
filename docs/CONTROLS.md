@@ -13,6 +13,7 @@ and it's a first-class criterion on the capstone rubric.
 | `cge-deny-public-blob` (Deny) | Prevents public blob exposure at the API, before the resource exists | PR.DS |
 | `cge-dine-storage-diagnostics` (DeployIfNotExists) | Logging that enforces its own coverage | PR.PS, DE.CM |
 | `cge-cosmos-disable-local-auth` (Audit; Deny once earned) *(my addition)* | Keeps the evidence database identity-only: any Cosmos account that accepts account keys is flagged | PR.AA, PR.DS |
+| `cge-require-owner-tag-rg` (Audit; Deny once earned) *(my addition)* | Every resource group names an accountable owner, the tag the POA&M's owner column resolves from | GV.RR, ID.AM |
 | Remediation identity (user-assigned, whitelist roles) | Every automated change has a named, auditable author | PR.AA, GV.RR |
 | Log Analytics workspace + Activity Log routing | Central audit trail beyond the 90-day default | DE.CM, PR.PS |
 
