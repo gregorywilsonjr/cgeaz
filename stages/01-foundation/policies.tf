@@ -1,4 +1,4 @@
-# Five policies (three from the course starter, two of my own), one initiative, assigned once at mg-grc-sandbox.
+# Six policies (three from the course starter, three of my own), one initiative, assigned once at mg-grc-sandbox.
 # Every subscription that ever joins the sandbox group inherits all of it. (CSF: GV.PO, PR.DS, PR.PS)
 
 # --- 1. Require the `env` tag on resource groups (inventory hygiene; POA&M owner resolution) ---
@@ -201,6 +201,45 @@ resource "azurerm_policy_definition" "require_owner_tag" {
   })
 }
 
+# --- 6. (My addition) Storage accounts must require TLS 1.2 or newer ---
+# Evidence, reports and Terraform state all travel to storage accounts; old TLS versions put them at risk in transit.
+# Differs from Microsoft's built-in on purpose: the built-in flags anything not EXACTLY TLS1_2, which would
+# wrongly flag a stricter TLS1_3 minimum. This rule flags only versions below 1.2, or no minimum set at all.
+# blast radius: Audit flags only. At Deny, blocks creating or updating any storage account under mg-grc-sandbox
+# whose minimum TLS is below 1.2 (including your own Terraform or CLI changes to such an account until it is fixed).
+# rollback: set storage_tls_policy_effect back to "Audit" in a reviewed PR and apply. (CSF: PR.DS)
+
+resource "azurerm_policy_definition" "storage_min_tls" {
+  name                = "cge-storage-min-tls12"
+  display_name        = "Storage accounts must require TLS 1.2 or newer"
+  policy_type         = "Custom"
+  mode                = "Indexed"
+  management_group_id = azurerm_management_group.sandbox.id
+
+  parameters = jsonencode({
+    effect = {
+      type          = "String"
+      allowedValues = ["Audit", "Deny", "Disabled"]
+      defaultValue  = "Audit"
+    }
+  })
+
+  policy_rule = jsonencode({
+    if = {
+      allOf = [
+        { field = "type", equals = "Microsoft.Storage/storageAccounts" },
+        {
+          anyOf = [
+            { field = "Microsoft.Storage/storageAccounts/minimumTlsVersion", "in" = ["TLS1_0", "TLS1_1"] },
+            { field = "Microsoft.Storage/storageAccounts/minimumTlsVersion", exists = "false" }
+          ]
+        }
+      ]
+    }
+    then = { effect = "[parameters('effect')]" }
+  })
+}
+
 # --- The initiative: one assignment, whole-sandbox inheritance ---
 
 resource "azurerm_management_group_policy_set_definition" "grc_baseline" {
@@ -215,6 +254,7 @@ resource "azurerm_management_group_policy_set_definition" "grc_baseline" {
     workspaceId      = { type = "String" }
     cosmosAuthEffect = { type = "String", defaultValue = "Audit" }
     ownerTagEffect   = { type = "String", defaultValue = "Audit" }
+    storageTlsEffect = { type = "String", defaultValue = "Audit" }
   })
 
   policy_definition_reference {
@@ -251,6 +291,13 @@ resource "azurerm_management_group_policy_set_definition" "grc_baseline" {
       effect = { value = "[parameters('ownerTagEffect')]" }
     })
   }
+
+  policy_definition_reference {
+    policy_definition_id = azurerm_policy_definition.storage_min_tls.id
+    parameter_values = jsonencode({
+      effect = { value = "[parameters('storageTlsEffect')]" }
+    })
+  }
 }
 
 resource "azurerm_management_group_policy_assignment" "grc_baseline" {
@@ -266,6 +313,7 @@ resource "azurerm_management_group_policy_assignment" "grc_baseline" {
     workspaceId      = { value = azurerm_log_analytics_workspace.grc.id }
     cosmosAuthEffect = { value = var.cosmos_auth_policy_effect }
     ownerTagEffect   = { value = var.owner_tag_policy_effect }
+    storageTlsEffect = { value = var.storage_tls_policy_effect }
   })
 
   # Remediation effects (deployIfNotExists) execute AS this identity.
