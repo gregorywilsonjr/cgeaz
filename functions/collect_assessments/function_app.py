@@ -4,6 +4,9 @@ Timer fires nightly -> managed identity -> Defender assessments API -> Cosmos.
 One document per assessment per run, upserted on a deterministic ID so re-runs
 refresh instead of duplicate. Deliberately boring: if you can read this file,
 you can defend this pipeline's data lineage.
+
+Severity fix: the assessments LIST call does not return metadata (severity,
+categories), so the collector joins it from Defender's metadata catalog.
 """
 
 import datetime
@@ -23,6 +26,45 @@ ARM = "https://management.azure.com"
 API_VERSION = "2021-06-01"
 
 
+def _metadata_catalog(headers: dict) -> dict:
+    """Assessment key -> metadata (severity, categories) for every built-in recommendation.
+
+    One call per run. If it fails, _metadata_for() falls back to one lookup per
+    assessment type, so a missing catalog never stops collection.
+    """
+    catalog = {}
+    url = f"{ARM}/providers/Microsoft.Security/assessmentMetadata?api-version={API_VERSION}"
+    try:
+        while url:
+            resp = requests.get(url, headers=headers, timeout=60)
+            resp.raise_for_status()
+            payload = resp.json()
+            for item in payload.get("value", []):
+                catalog[item["name"]] = item.get("properties", {})
+            url = payload.get("nextLink")
+    except requests.RequestException as exc:
+        logging.warning("metadata catalog unavailable (%s); falling back per assessment", exc)
+    return catalog
+
+
+def _metadata_for(assessment: dict, catalog: dict, headers: dict) -> dict:
+    """Metadata for one finding: the catalog first, else one GET with $expand=metadata."""
+    key = assessment["name"]
+    if key not in catalog:
+        try:
+            resp = requests.get(
+                f"{ARM}{assessment['id']}?api-version={API_VERSION}&$expand=metadata",
+                headers=headers,
+                timeout=60,
+            )
+            resp.raise_for_status()
+            catalog[key] = resp.json().get("properties", {}).get("metadata") or {}
+        except requests.RequestException as exc:
+            logging.warning("no metadata for %s (%s)", key, exc)
+            catalog[key] = {}
+    return catalog[key]
+
+
 def _collect() -> dict:
     subscription_id = os.environ["SUBSCRIPTION_ID"]
     cosmos_endpoint = os.environ["COSMOS_ENDPOINT"]
@@ -32,6 +74,8 @@ def _collect() -> dict:
     # (and to your `az login` session when run locally). No keys, anywhere.
     credential = DefaultAzureCredential()
     token = credential.get_token(f"{ARM}/.default").token
+    headers = {"Authorization": f"Bearer {token}"}
+    catalog = _metadata_catalog(headers)
 
     run_id = str(uuid.uuid4())
     collected_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
@@ -48,12 +92,13 @@ def _collect() -> dict:
     )
     written = 0
     while url:
-        resp = requests.get(url, headers={"Authorization": f"Bearer {token}"}, timeout=60)
+        resp = requests.get(url, headers=headers, timeout=60)
         resp.raise_for_status()
         payload = resp.json()
 
         for assessment in payload.get("value", []):
             props = assessment.get("properties", {})
+            meta = props.get("metadata") or _metadata_for(assessment, catalog, headers)
             resource_id = (
                 props.get("resourceDetails", {}).get("Id")
                 or props.get("resourceDetails", {}).get("id", "")
@@ -71,8 +116,8 @@ def _collect() -> dict:
                     "displayName": props.get("displayName"),
                     "status": props.get("status", {}).get("code"),
                     "statusCause": props.get("status", {}).get("cause"),
-                    "severity": props.get("metadata", {}).get("severity"),
-                    "categories": props.get("metadata", {}).get("categories"),
+                    "severity": meta.get("severity"),
+                    "categories": meta.get("categories"),
                     "resourceId": resource_id,
                     "collectedAt": collected_at,
                     "runId": run_id,
