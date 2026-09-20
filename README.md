@@ -313,6 +313,7 @@ by [`scripts/capture-evidence.sh`](scripts/capture-evidence.sh).
 | Claim | Where to see it |
 |---|---|
 | The gate blocks a non-compliant plan | [PR #1](https://github.com/gregorywilsonjr/cgeaz/pull/1): a public, shared-key storage account that `storage.rego` failed, closed unmerged |
+| Deny policies refuse non-compliant resources | Live attempts to create a public storage account and one with no TLS minimum, both refused with `RequestDisallowedByPolicy` ([EVIDENCE.md](docs/EVIDENCE.md)) |
 | Reports can't be changed or deleted | Deleting a report fails with `BlobImmutableDueToPolicy`, even for an Owner ([Lab 4](labs/04-evidence/README.md), step 7) |
 | A human approves each repair, and the repair runs as the remediation identity | The Activity Log shows the principal ID of `id-grc-remediation-dev` as the caller on the seed account's fix ([Lab 6](labs/06-loop/README.md), step 4) |
 | Drift detection runs every night | The `drift-detection` run history in this repo's Actions tab |
@@ -362,8 +363,8 @@ Additions:
   ([PR #2](https://github.com/gregorywilsonjr/cgeaz/pull/2)), resource groups must
   name an owner ([PR #3](https://github.com/gregorywilsonjr/cgeaz/pull/3)), and
   storage must require TLS 1.2 or newer
-  ([PR #5](https://github.com/gregorywilsonjr/cgeaz/pull/5)). The reasoning is in
-  [CONTROLS.md](docs/CONTROLS.md).
+  ([PR #5](https://github.com/gregorywilsonjr/cgeaz/pull/5)), which has since earned
+  Deny. The reasoning is in [CONTROLS.md](docs/CONTROLS.md).
 - **A fix at the source for my own finding.** The owner-tag control flagged the
   state resource group, so [`bootstrap.sh`](labs/03-foundation/bootstrap.sh) now
   tags it with an owner ([PR #4](https://github.com/gregorywilsonjr/cgeaz/pull/4)).

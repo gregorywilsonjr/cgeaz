@@ -56,9 +56,9 @@ variable "owner_tag_policy_effect" {
 }
 
 variable "storage_tls_policy_effect" {
-  description = "Effect for the storage minimum-TLS policy (Audit while onboarding, Deny once every account requires TLS 1.2+)."
+  description = "Effect for the storage minimum-TLS policy. Earned Deny: every storage account declared TLS 1.2+ at Audit first."
   type        = string
-  default     = "Audit"
+  default     = "Deny"
   validation {
     condition     = contains(["Audit", "Deny", "Disabled"], var.storage_tls_policy_effect)
     error_message = "storage_tls_policy_effect must be Audit, Deny, or Disabled."

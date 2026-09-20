@@ -205,18 +205,28 @@ if latest:
         print("```")
 PY
 
-echo ">> 4/9 live deny test"
-say "" "## 4. The preventive control fires" "" \
-  "A live attempt to create a storage account that allows public blob access." \
-  "\`cge-deny-public-blob\` is at Deny, so Azure refuses the request and nothing is created."
-DENY_NAME="stgrcdeny$(date -u +%m%d%H%M%S)"
-block 'az policy assignment show --name cge-grc-baseline --scope /providers/Microsoft.Management/managementGroups/mg-grc-sandbox --query "parameters.publicBlobEffect.value" -o tsv'
+echo ">> 4/9 live deny tests"
+say "" "## 4. The preventive controls fire" "" \
+  "Two live attempts to create a storage account that breaks a Deny policy. The first" \
+  "allows public blob access (\`cge-deny-public-blob\`); the second declares no minimum" \
+  "TLS version (\`cge-storage-min-tls12\`). Azure refuses both and nothing is created." \
+  "The last block is the other side of the TLS control: a tag-only update to the seed" \
+  "account, which already declares TLS 1.2, still goes through."
+STAMP=$(date -u +%m%d%H%M%S)
+DENY_NAME="stgrcdeny$STAMP"
+TLS_NAME="stgrctls$STAMP"
+block 'az policy assignment show --name cge-grc-baseline --scope /providers/Microsoft.Management/managementGroups/mg-grc-sandbox --query "{publicBlob:parameters.publicBlobEffect.value, storageTls:parameters.storageTlsEffect.value}" -o table'
 block 'az storage account create --name "$DENY_NAME" --resource-group rg-grc-sandbox-dev --location eastus --sku Standard_LRS --min-tls-version TLS1_2 --allow-blob-public-access true -o none 2>&1 | head -n 12'
-if az storage account show --name "$DENY_NAME" --resource-group rg-grc-sandbox-dev -o none 2>/dev/null; then
-  az storage account delete --name "$DENY_NAME" --resource-group rg-grc-sandbox-dev --yes
-  say "" "**The account was created, so the deny did not fire. It was deleted right away.**"
-  echo "WARNING: the deny test created $DENY_NAME (now deleted). Check cge-deny-public-blob." >&2
-fi
+block 'az storage account create --name "$TLS_NAME" --resource-group rg-grc-sandbox-dev --location eastus --sku Standard_LRS --allow-blob-public-access false -o none 2>&1 | head -n 12'
+SEED_NAME=$(az storage account list --resource-group rg-grc-sandbox-dev --query "[?starts_with(name, 'stgrcseed')].name | [0]" -o tsv)
+block 'az storage account update --name "$SEED_NAME" --resource-group rg-grc-sandbox-dev --set tags.lastcheck="$STAMP" --query "{name:name, minTls:minimumTlsVersion, lastcheck:tags.lastcheck}" -o table'
+for name in "$DENY_NAME" "$TLS_NAME"; do
+  if az storage account show --name "$name" --resource-group rg-grc-sandbox-dev -o none 2>/dev/null; then
+    az storage account delete --name "$name" --resource-group rg-grc-sandbox-dev --yes
+    say "" "**\`$name\` was created, so its deny did not fire. It was deleted right away.**"
+    echo "WARNING: the deny test created $name (now deleted). Check the Deny policies." >&2
+  fi
+done
 
 echo ">> 5/9 CI gate"
 GATE_RUN=$(gh run list --repo "$GH_REPO" --workflow compliance-gate --branch gate-test-public-storage \
@@ -299,6 +309,6 @@ mv "$TMP/final.md" "$OUT"
 echo
 echo "Wrote docs/EVIDENCE.md ($(wc -l < "$OUT") lines)."
 echo "  WORM refusals, expect 2 (the delete and the overwrite): $(grep -c 'BlobImmutableDueToPolicy' "$OUT")"
-echo "  Deny refusals, expect at least 1: $(grep -c 'RequestDisallowedByPolicy' "$OUT")"
+echo "  Deny refusals, expect at least 2 (one per test): $(grep -c 'RequestDisallowedByPolicy' "$OUT")"
 echo "  $(grep -E '^[0-9]+ of [0-9]+ reports reproduce' "$OUT" || echo 'Report trace: no reports found')"
 echo "Read it before you commit it."

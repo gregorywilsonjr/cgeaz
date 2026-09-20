@@ -21,7 +21,7 @@ policy has its own assignment at the same scope.
 | `cge-dine-storage-diagnostics` | DeployIfNotExists | Every storage account sends its metrics to `law-grc-sandbox`; a missing diagnostic setting is added | [policies.tf](../stages/01-foundation/policies.tf) | PR.PS, DE.CM |
 | `cge-cosmos-disable-local-auth` *(mine)* | Audit | No Cosmos DB account accepts account keys, so every evidence write is made by a named identity | [policies.tf](../stages/01-foundation/policies.tf) | PR.AA, PR.DS |
 | `cge-require-owner-tag-rg` *(mine)* | Audit | Every resource group names an accountable owner in a non-empty `owner` tag | [policies.tf](../stages/01-foundation/policies.tf) | GV.RR, ID.AM |
-| `cge-storage-min-tls12` *(mine)* | Audit | Every storage account declares a minimum TLS version of 1.2 or newer | [policies.tf](../stages/01-foundation/policies.tf) | PR.DS |
+| `cge-storage-min-tls12` *(mine)* | Deny | Every storage account declares a minimum TLS version of 1.2 or newer | [policies.tf](../stages/01-foundation/policies.tf) | PR.DS |
 | `cge-fix-public-blob` (stage 06) | Modify, dry-run | Turns public blob access off on existing accounts, but only when a person starts a remediation task | [main.tf](../stages/06-enforcement/main.tf) | PR.DS, RS.MI |
 | `remediation_mode` variable (stage 06) | `dry-run` | Moving from audit to dry-run to enforce is a reviewed change: automation acts, a human authorizes | [variables.tf](../stages/06-enforcement/variables.tf) | GV.PO, GV.RR |
 | Remediation identity `id-grc-remediation-dev` | n/a | Every automated fix runs as one named identity with a whitelist of roles, so the Activity Log shows its author | [identity.tf](../stages/01-foundation/identity.tf) | PR.AA, GV.RR |
@@ -36,6 +36,12 @@ the code next to each policy.
   Terraform and CLI changes. It changes nothing that already exists. Rollback: set
   `public_blob_policy_effect` to `Audit` in a reviewed PR (Lab 6 did exactly that, then
   set it back).
+- **`cge-storage-min-tls12` (Deny):** refuses any storage account under `mg-grc-sandbox`
+  that doesn't declare TLS 1.2 or newer, such as an `az storage account create` that
+  leaves the setting out. Updates to accounts that already comply still go through,
+  because Azure checks an update against the account's settings after the change. It
+  changes nothing that already exists. Rollback: set `storage_tls_policy_effect` back
+  to `Audit` in a reviewed PR.
 - **`cge-dine-storage-diagnostics` (DeployIfNotExists):** creates one diagnostic setting
   per storage account, as the remediation identity. It never modifies or deletes
   anything else. Rollback: remove it from the initiative in a reviewed PR; settings it
@@ -44,13 +50,11 @@ the code next to each policy.
   on existing storage accounts, and only after a person creates a remediation task. It
   can't delete anything, read data or touch any other property. Rollback: set
   `remediation_mode` back to `audit`.
-- **The four Audit policies** only flag; they change nothing. At Deny:
+- **The three Audit policies** only flag; they change nothing. At Deny:
   - `cge-require-env-tag-rg` and `cge-require-owner-tag-rg` would block creating or
     updating a resource group without the tag, including the temporary group that the
     course's `probe-quota.sh` creates.
   - `cge-cosmos-disable-local-auth` would block any Cosmos DB account that accepts keys.
-  - `cge-storage-min-tls12` would block any storage account that doesn't declare TLS 1.2
-    or newer.
   - Rollback for each: its `*_policy_effect` variable back to `Audit` in a reviewed PR.
 
 ## Evidence plane: collection and reporting
@@ -121,6 +125,10 @@ found and how that was closed.
   fixed it anyway with a recorded CLI change (the account is outside Terraform on
   purpose). The next scan showed it Compliant, and the Activity Log shows who made the
   change.
+- **Now:** Deny. It earned it: every storage account passed at Audit first, and the
+  one finding was closed before the switch. The evidence script tests both sides of it
+  on every run: a create with no TLS setting must be refused, and a tag-only update
+  to a compliant account must still go through ([EVIDENCE.md](EVIDENCE.md), section 4).
 
 ### Findings log
 
