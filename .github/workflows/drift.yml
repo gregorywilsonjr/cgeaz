@@ -40,6 +40,10 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: hashicorp/setup-terraform@v3
+        with:
+          # The wrapper turns Terraform's exit code 2 ("changes found") into 0,
+          # which silently disables drift detection. Off everywhere for honest exit codes.
+          terraform_wrapper: false
 
       - uses: azure/login@v2
         with:

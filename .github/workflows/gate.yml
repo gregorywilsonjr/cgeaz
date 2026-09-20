@@ -31,12 +31,17 @@ jobs:
     if: ${{ vars.AZURE_CLIENT_ID != '' }}
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false # every stage reports its own verdict; one failure doesn't cancel the rest
       matrix:
         stage: [01-foundation, 03-evidence-store, 04-reporting, 06-enforcement]
     steps:
       - uses: actions/checkout@v4
 
       - uses: hashicorp/setup-terraform@v3
+        with:
+          # The wrapper turns Terraform's exit code 2 ("changes found") into 0,
+          # which silently disables drift detection. Off everywhere for honest exit codes.
+          terraform_wrapper: false
 
       - uses: azure/login@v2
         with:
