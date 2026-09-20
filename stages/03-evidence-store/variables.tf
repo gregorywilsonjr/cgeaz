@@ -32,3 +32,9 @@ variable "functions_location" {
   type        = string
   default     = "centralus"
 }
+
+variable "deployer_object_id" {
+  description = "Entra object ID of the human deployer granted data-plane access (framework seeding, WORM proof). Empty = whoever runs Terraform; CI sets it so its plans match yours."
+  type        = string
+  default     = ""
+}
