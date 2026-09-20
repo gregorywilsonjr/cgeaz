@@ -1,4 +1,4 @@
-# Four policies (three from the course starter, one of my own), one initiative, assigned once at mg-grc-sandbox.
+# Five policies (three from the course starter, two of my own), one initiative, assigned once at mg-grc-sandbox.
 # Every subscription that ever joins the sandbox group inherits all of it. (CSF: GV.PO, PR.DS, PR.PS)
 
 # --- 1. Require the `env` tag on resource groups (inventory hygiene; POA&M owner resolution) ---
@@ -164,6 +164,43 @@ resource "azurerm_policy_definition" "cosmos_local_auth" {
   })
 }
 
+# --- 5. (My addition) Resource groups must name an accountable owner ---
+# The POA&M's Owner column is meant to resolve from this tag, so a missing tag means an unowned finding.
+# blast radius: Audit flags only. At Deny, blocks creating or updating a resource group under mg-grc-sandbox
+# without a non-empty owner tag; it never touches the resources inside.
+# rollback: set owner_tag_policy_effect back to "Audit" in a reviewed PR and apply. (CSF: GV.RR, ID.AM)
+
+resource "azurerm_policy_definition" "require_owner_tag" {
+  name                = "cge-require-owner-tag-rg"
+  display_name        = "Resource groups must carry a non-empty owner tag"
+  policy_type         = "Custom"
+  mode                = "All"
+  management_group_id = azurerm_management_group.sandbox.id
+
+  parameters = jsonencode({
+    effect = {
+      type          = "String"
+      allowedValues = ["Audit", "Deny", "Disabled"]
+      defaultValue  = "Audit"
+    }
+  })
+
+  policy_rule = jsonencode({
+    if = {
+      allOf = [
+        { field = "type", equals = "Microsoft.Resources/subscriptions/resourceGroups" },
+        {
+          anyOf = [
+            { field = "tags['owner']", exists = "false" },
+            { field = "tags['owner']", equals = "" }
+          ]
+        }
+      ]
+    }
+    then = { effect = "[parameters('effect')]" }
+  })
+}
+
 # --- The initiative: one assignment, whole-sandbox inheritance ---
 
 resource "azurerm_management_group_policy_set_definition" "grc_baseline" {
@@ -177,6 +214,7 @@ resource "azurerm_management_group_policy_set_definition" "grc_baseline" {
     publicBlobEffect = { type = "String", defaultValue = "Deny" }
     workspaceId      = { type = "String" }
     cosmosAuthEffect = { type = "String", defaultValue = "Audit" }
+    ownerTagEffect   = { type = "String", defaultValue = "Audit" }
   })
 
   policy_definition_reference {
@@ -206,6 +244,13 @@ resource "azurerm_management_group_policy_set_definition" "grc_baseline" {
       effect = { value = "[parameters('cosmosAuthEffect')]" }
     })
   }
+
+  policy_definition_reference {
+    policy_definition_id = azurerm_policy_definition.require_owner_tag.id
+    parameter_values = jsonencode({
+      effect = { value = "[parameters('ownerTagEffect')]" }
+    })
+  }
 }
 
 resource "azurerm_management_group_policy_assignment" "grc_baseline" {
@@ -220,6 +265,7 @@ resource "azurerm_management_group_policy_assignment" "grc_baseline" {
     publicBlobEffect = { value = var.public_blob_policy_effect }
     workspaceId      = { value = azurerm_log_analytics_workspace.grc.id }
     cosmosAuthEffect = { value = var.cosmos_auth_policy_effect }
+    ownerTagEffect   = { value = var.owner_tag_policy_effect }
   })
 
   # Remediation effects (deployIfNotExists) execute AS this identity.

@@ -44,3 +44,13 @@ variable "cosmos_auth_policy_effect" {
     error_message = "cosmos_auth_policy_effect must be Audit, Deny, or Disabled."
   }
 }
+
+variable "owner_tag_policy_effect" {
+  description = "Effect for the require-owner-tag policy (Audit while onboarding, Deny once every resource group is owned)."
+  type        = string
+  default     = "Audit"
+  validation {
+    condition     = contains(["Audit", "Deny", "Disabled"], var.owner_tag_policy_effect)
+    error_message = "owner_tag_policy_effect must be Audit, Deny, or Disabled."
+  }
+}
