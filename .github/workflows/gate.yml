@@ -46,13 +46,20 @@ jobs:
       - name: terraform validate + plan
         working-directory: stages/${{ matrix.stage }}
         run: |
-          terraform init -input=false -backend-config=../../labs/03-foundation/backend.hcl
+          terraform init -input=false -backend-config="resource_group_name=rg-grc-tfstate" -backend-config="storage_account_name=$TF_VAR_state_storage_account" -backend-config="container_name=tfstate"
           terraform validate
           terraform plan -input=false -out=tf.plan
           terraform show -json tf.plan > plan.json
 
       - name: OPA gate (conftest)
-        uses: instrumenta/conftest-action@master
-        with:
-          files: stages/${{ matrix.stage }}/plan.json
-          policy: policy
+        # Pinned version + checksum: the gate's own tooling is verified before it judges anything.
+        # (instrumenta/conftest-action@master is a 2020 image that cannot parse `import rego.v1`.)
+        env:
+          CONFTEST_VERSION: "0.70.1"
+          CONFTEST_SHA256: "613d124b8f6c1f3cee890491f7ab19114cca5a2102ca47cb2e6c35b4c23f9c8a"
+          STAGE: ${{ matrix.stage }}
+        run: |
+          curl -sSLo conftest.tgz "https://github.com/open-policy-agent/conftest/releases/download/v${CONFTEST_VERSION}/conftest_${CONFTEST_VERSION}_Linux_x86_64.tar.gz"
+          echo "${CONFTEST_SHA256}  conftest.tgz" | sha256sum -c -
+          tar xzf conftest.tgz conftest
+          ./conftest test --no-color "stages/${STAGE}/plan.json" -p policy
