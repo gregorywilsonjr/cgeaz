@@ -12,10 +12,13 @@ SUB_ID=$(az account show --query id -o tsv)
 SUFFIX=$(echo "$SUB_ID" | tr -d '-' | cut -c1-8)
 SA_NAME="stgrctfstate${SUFFIX}"
 CONTAINER="tfstate"
+# Every resource group names an accountable owner (policy cge-require-owner-tag-rg).
+# Same email as the Lab 1 owner tag; fails fast if it is not set.
+OWNER="${TF_VAR_owner_email:?set TF_VAR_owner_email to your owner email first (see Lab 3)}"
 
 echo ">> State resource group: $RG_STATE"
 az group create --name "$RG_STATE" --location "$LOCATION" \
-  --tags env=shared purpose=terraform-state --output none
+  --tags env=shared purpose=terraform-state owner="$OWNER" --output none
 
 echo ">> State storage account: $SA_NAME (versioned, no public blob access)"
 az storage account create \
@@ -26,7 +29,7 @@ az storage account create \
   --kind StorageV2 \
   --min-tls-version TLS1_2 \
   --allow-blob-public-access false \
-  --tags env=shared purpose=terraform-state \
+  --tags env=shared purpose=terraform-state owner="$OWNER" \
   --output none
 
 echo ">> Enabling blob versioning (every state change becomes a recoverable version)"
