@@ -327,6 +327,11 @@ Fixes, each one found by running the pipeline for real:
   severity, so every finding came out "Unknown" and every POA&M item got the default
   90-day due date. The collector now looks up each finding's severity in Defender's
   metadata catalog ([collector](functions/collect_assessments/function_app.py)).
+- **Old reports couldn't be re-checked.** Each finding kept the same document ID
+  from run to run, so every night's collection overwrote the one before it, and a
+  report's numbers could only be reproduced until the next run. The collector now
+  puts the run ID in every document ID, so every run is kept and any report can be
+  re-checked against the run it was built from.
 - **CI couldn't run.** The workflows read `backend.hcl`, which is gitignored, so
   `terraform init` failed. They now pass the backend settings inline, with the state
   account's name from a repository variable. The gate's conftest action was a 2020

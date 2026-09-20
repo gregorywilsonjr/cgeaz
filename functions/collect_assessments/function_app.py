@@ -1,9 +1,11 @@
 """CGE-AZ pipeline — Stage 3 collector.
 
 Timer fires nightly -> managed identity -> Defender assessments API -> Cosmos.
-One document per assessment per run, upserted on a deterministic ID so re-runs
-refresh instead of duplicate. Deliberately boring: if you can read this file,
-you can defend this pipeline's data lineage.
+One document per assessment per run. The document ID includes the run ID, so no
+run overwrites another and any report can be re-checked against the run it was
+built from; a retried write within a run upserts instead of duplicating.
+Deliberately boring: if you can read this file, you can defend this pipeline's
+data lineage.
 
 Severity fix: the assessments LIST call does not return metadata (severity,
 categories), so the collector joins it from Defender's metadata catalog.
@@ -103,9 +105,10 @@ def _collect() -> dict:
                 props.get("resourceDetails", {}).get("Id")
                 or props.get("resourceDetails", {}).get("id", "")
             )
-            # Deterministic ID: same assessment+resource upserts, never duplicates.
+            # Deterministic per run: a retry within the run upserts, and no run overwrites
+            # an earlier one, so every report's numbers stay reproducible from the store.
             doc_id = hashlib.sha256(
-                f"{assessment['name']}|{resource_id}".encode()
+                f"{run_id}|{assessment['name']}|{resource_id}".encode()
             ).hexdigest()[:32]
 
             container.upsert_item(
