@@ -75,18 +75,17 @@ flowchart LR
 
 - **Collect.** Every night the collector reads every Defender assessment for the
   subscription and joins in each one's severity from Defender's metadata catalog.
-  It writes one document per assessment, stamped with a `runId` and
-  `collectedAt`. Document IDs are deterministic, so a re-run updates the existing
-  document instead of adding a duplicate. Cosmos therefore holds the latest state
-  of each assessment.
+  It writes one document per assessment per run, stamped with a `runId` and
+  `collectedAt`. The document ID includes the run ID, so a retried write updates
+  instead of duplicating, and no run overwrites another. Cosmos keeps every run,
+  which is what lets any report be re-checked against the run it was built from.
 - **Report.** The POA&M (`xlsx` and `json`) and the SAR (`md`) are built from the
   newest collection run only, so every number in them traces back to stored
   documents from that run. Files land in the `reports` container under
   `poam/YYYY/MM/` and `sar/YYYY/MM/`, named by UTC date. The generators never
   overwrite, so there is at most one of each report per day.
 - **Keep.** The `reports` container has a 90-day immutability (WORM) policy: a
-  report can't be edited or deleted until it ages out, not even by an Owner. The
-  history of the program lives in these files, not in Cosmos.
+  report can't be edited or deleted until it ages out, not even by an Owner.
 
 ### Schedules
 
