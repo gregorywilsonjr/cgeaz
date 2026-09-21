@@ -70,7 +70,7 @@ the code next to each policy.
 | POA&M generator (daily, 06:00 UTC) | Every open finding from the newest run, with a due date by severity: High 30 days, Medium 90, Low 180 | [function_app.py](../functions/reports/function_app.py) | ID.IM, GV.RM |
 | SAR generator (weekly, Monday 07:00 UTC) | Findings by severity, each one traceable to its stored document | [function_app.py](../functions/reports/function_app.py) | ID.RA, GV.OV |
 | Collector and reporter as separate identities | The identity that records facts can't write reports, and the one that writes reports can't touch the facts or the platform | [collector.tf](../stages/03-evidence-store/collector.tf), [main.tf](../stages/04-reporting/main.tf) | PR.AA, GV.RR |
-| Activity Log to `law-grc-sandbox` | Makes every change queryable by who made it; the workspace keeps 30 days | [route-activity-log.sh](../labs/02-toolkit/route-activity-log.sh) | DE.CM, PR.PS |
+| Activity Log to `law-grc-sandbox` | Makes every change queryable by who made it; the workspace keeps 30 days. Adopted into stage 01 with `terraform import`, so drift detection covers the routing itself | [monitoring.tf](../stages/01-foundation/monitoring.tf) | DE.CM, PR.PS |
 
 ## Pipeline controls: the repo's own guardrails
 
@@ -81,7 +81,7 @@ the code next to each policy.
 | `policy_identity.rego` | A policy assignment without an identity, whose remediation would silently never run. Audit-only assignments that need none, such as `nist-csf-20`, are listed in the rule as data, each one a reviewed exception | [policy_identity.rego](../policy/policy_identity.rego) | PR.PS |
 | `broad_roles.rego` | An Owner or Contributor role assignment in Terraform | [broad_roles.rego](../policy/broad_roles.rego) | PR.AA |
 | `drift-detection` workflow (nightly, 08:00 UTC) | Azure no longer matching the code, in all five stages. A drifted stage opens a GitHub issue labeled `drift`, with the owner email redacted, and fails the run; so does a plan that errors, so a broken detector can't pass | [drift.yml](../.github/workflows/drift.yml) | DE.CM |
-| "Who is touching Azure" Activity Log query | Changes by anyone, human or identity, counted by caller | [EVIDENCE.md](EVIDENCE.md#7-drift-detection-in-both-directions) | DE.CM, DE.AE |
+| Control-plane change alert (hourly) | Emails the owner within about an hour of any successful administrative write or delete, then mutes for six hours; the Activity Log keeps every change with its caller, and the evidence page counts them by caller | [monitoring.tf](../stages/01-foundation/monitoring.tf), [EVIDENCE.md](EVIDENCE.md#7-drift-detection-in-both-directions) | DE.CM, DE.AE |
 | Evidence script | Regenerates the proof page from live output and refuses to publish personal identifiers. In CI the owner email is a secret, so run logs mask it | [capture-evidence.sh](../scripts/capture-evidence.sh) | GV.OV |
 
 ## My three controls
