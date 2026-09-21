@@ -104,7 +104,10 @@ say "" "## 2. Every report number traces to a stored query" "" \
   "own collection run:" \
   "\`SELECT VALUE COUNT(1) FROM c WHERE c.runId = @run AND c.status = 'Unhealthy'\`." \
   "The list is also the run history: one POA&M per day and one SAR per week since the" \
-  "timers went live. The query runs as me, through the data-plane role stage 03 grants me." ""
+  "timers went live. The query runs as me, through the data-plane role stage 03 grants me." "" \
+  "Reports written before the collector kept every run point at a run the store no longer" \
+  "holds, so they cannot reproduce by construction. They are counted separately rather than" \
+  "hidden: see [INCIDENT-001-REPORT-LINEAGE.md](INCIDENT-001-REPORT-LINEAGE.md)." ""
 mkdir -p "$TMP/reports"
 az storage blob download-batch --account-name "$STG" --auth-mode login --source reports \
   --destination "$TMP/reports" --pattern "poam/*.json" -o none >/dev/null
@@ -119,7 +122,9 @@ root = sys.argv[1]
 store = (CosmosClient(os.environ["COSMOS_ENDPOINT"], DefaultAzureCredential())
          .get_database_client("grc").get_container_client("assessments"))
 query = "SELECT VALUE COUNT(1) FROM c WHERE c.runId = @run AND c.status = 'Unhealthy'"
+held_query = "SELECT VALUE COUNT(1) FROM c WHERE c.runId = @run"
 cache = {}
+held_cache = {}
 
 def store_count(run):
     if not run or run == "None":
@@ -143,22 +148,47 @@ for path in glob.glob(os.path.join(root, "**", "*"), recursive=True):
         said = re.search(r"Open findings:\*\* (\d+)", text)
         rows.append((name, run.group(1) if run else None, int(said.group(1)) if said else None))
 
+def run_held(run):
+    """Does the store still hold the run this report was built from?
+
+    Reports written before the collector kept every run point at a runId whose
+    documents a later run overwrote. Those cannot reproduce by construction, so
+    they are counted separately instead of as failures. The store decides which
+    population a report is in - nothing here is hardcoded to a date.
+    """
+    if not run or run == "None":
+        return False
+    if run not in held_cache:
+        held_cache[run] = sum(store.query_items(held_query, parameters=[{"name": "@run", "value": run}],
+                                                enable_cross_partition_query=True)) > 0
+    return held_cache[run]
+
 def by_date(row):
     day = re.search(r"\d{4}-\d{2}-\d{2}", row[0])
     return (day.group(0) if day else "", row[0])
 
-print("| Report | Collection run | Report says | Store query today | Reproduces |")
-print("|---|---|---|---|---|")
+print("| Report | Collection run | Report says | Store query today | Run still held | Reproduces |")
+print("|---|---|---|---|---|---|")
 same = 0
+held = 0
+orphans = []
 for name, run, said in sorted(rows, key=by_date):
     now = store_count(run)
+    in_store = run_held(run)
     match = said is not None and now == said
-    same += match
-    print(f"| `{name}` | `{run}` | {said} | {now} | {'yes' if match else 'no'} |")
+    if in_store:
+        held += 1
+        same += match
+    else:
+        orphans.append(name)
+    print(f"| `{name}` | `{run}` | {said} | {now} | {'yes' if in_store else 'no'} | {'yes' if match else 'no'} |")
 print()
-print(f"{same} of {len(rows)} reports reproduce from the store today.")
-if same < len(rows):
-    print("A report that doesn't reproduce was built from documents that a later collection run overwrote.")
+print(f"{same} of {held} reports whose collection run the store still holds reproduce from the store today.")
+if orphans:
+    noun = "report" if len(orphans) == 1 else "reports"
+    verb = "was" if len(orphans) == 1 else "were"
+    print(f"{len(orphans)} earlier {noun} {verb} built from a collection run the store no longer "
+          "holds, before the collector kept every run. See docs/INCIDENT-001-REPORT-LINEAGE.md.")
 PY
 
 echo ">> 3/9 collection lineage"
@@ -256,9 +286,15 @@ echo ">> 7/9 drift detection"
 WS_ID=$(az monitor log-analytics workspace show --resource-group rg-grc-sandbox-dev --workspace-name law-grc-sandbox --query customerId -o tsv)
 KQL="AzureActivity | where TimeGenerated > ago(7d) | where CategoryValue == 'Administrative' and ActivityStatusValue in~ ('Success', 'Succeeded') | where OperationNameValue endswith '/WRITE' or OperationNameValue endswith '/DELETE' | summarize changes = count() by Caller | order by changes desc"
 say "" "## 7. Drift detection in both directions" "" \
-  "**Does Azure still match the code?** The nightly \`drift-detection\` workflow plans each" \
-  "covered stage; a plan with changes opens an issue labeled \`drift\`."
-block 'gh run list --repo "$GH_REPO" --workflow drift-detection --limit 14 --json createdAt,event,conclusion --jq ".[] | \"\(.createdAt)  \(.event)  \(.conclusion)\""'
+  "**Does Azure still match the code?** The nightly \`drift-detection\` workflow plans all five" \
+  "stages; a plan with changes opens an issue labeled \`drift\` and fails the run. Each red run" \
+  "below is accounted for. The two oldest, both manual on 2026-09-20, failed at \`azure/login\`" \
+  "with AADSTS700213: Entra had no federated credential yet matching GitHub's ID-based subject" \
+  "claim, so the trust failed closed (see \"CI couldn't sign in\" in" \
+  "[the README](../README.md#what-i-changed-from-the-course-starter)). The red run on 2026-09-21" \
+  "is the controlled drift test: a tag added to \`law-grc-sandbox\` outside Terraform was caught," \
+  "reported as issue #14 and removed through Terraform, and the run after it is clean."
+block 'gh run list --repo "$GH_REPO" --workflow drift-detection --limit 30 --json createdAt,event,conclusion --jq ".[] | \"\(.createdAt)  \(.event)  \(.conclusion)\""'
 block 'gh issue list --repo "$GH_REPO" --label drift --state all --limit 20 || true'
 say "" "**Who is touching Azure?** Successful administrative writes and deletes over the last" \
   "7 days, by caller, from the Activity Log in \`law-grc-sandbox\`. The query is:" \
@@ -309,6 +345,6 @@ mv "$TMP/final.md" "$OUT"
 echo
 echo "Wrote docs/EVIDENCE.md ($(wc -l < "$OUT") lines)."
 echo "  WORM refusals, expect 2 (the delete and the overwrite): $(grep -c 'BlobImmutableDueToPolicy' "$OUT")"
-echo "  Deny refusals, expect at least 2 (one per test): $(grep -c 'RequestDisallowedByPolicy' "$OUT")"
-echo "  $(grep -E '^[0-9]+ of [0-9]+ reports reproduce' "$OUT" || echo 'Report trace: no reports found')"
+echo "  Deny refusals, expect 2 (one per test): $(grep -c '^Code: RequestDisallowedByPolicy' "$OUT")"
+echo "  $(grep -E '^[0-9]+ of [0-9]+ reports whose collection run' "$OUT" || echo 'Report trace: no reports found')"
 echo "Read it before you commit it."
