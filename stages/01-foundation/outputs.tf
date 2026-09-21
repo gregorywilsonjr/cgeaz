@@ -30,3 +30,8 @@ output "remediation_identity_principal_id" {
   description = "Principal ID — use to filter the Activity Log for automated changes."
   value       = azurerm_user_assigned_identity.remediation.principal_id
 }
+
+output "change_activity_alert_id" {
+  description = "The hourly control-plane change tripwire. Detector 2 of 2."
+  value       = azurerm_monitor_scheduled_query_rules_alert_v2.control_plane_changes.id
+}

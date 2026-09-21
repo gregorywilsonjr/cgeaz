@@ -105,20 +105,34 @@ cd "$CGEAZ"
 
 Creates the `mg-grc` -> `mg-grc-sandbox` management groups and moves the
 subscription under them, plus the sandbox and evidence resource groups, the Log
-Analytics workspace, the remediation identity and the six-policy initiative. The
+Analytics workspace, the Activity Log routing into it, an hourly change alert, the
+remediation identity and the six-policy initiative. The
 first management group in a new tenant can take a few minutes. If the apply fails
 with `PrincipalNotFound`, the new identity hasn't replicated yet: run
 `terraform apply` again.
 
-### 4. Activity Log routing
+If the apply fails because `ds-activity-to-law` already exists, the course's
+`labs/02-toolkit/route-activity-log.sh` created it earlier. Adopt it, then apply again:
 
 ```bash
-./labs/02-toolkit/route-activity-log.sh
+cd "$CGEAZ/stages/01-foundation"
+SUB_ID=$(az account show --query id -o tsv)
+terraform import azurerm_monitor_diagnostic_setting.activity_log "/subscriptions/${SUB_ID}|ds-activity-to-law"
+terraform apply
+cd "$CGEAZ"
 ```
 
-Sends the subscription's Activity Log to `law-grc-sandbox`, so every change can be
-traced to whoever made it. On a new workspace the first rows can take 30 to 60
-minutes to appear.
+### 4. Activity Log routing
+
+Stage 01 owns it now: `ds-activity-to-law` sends the subscription's Activity Log to
+`law-grc-sandbox`, so every change can be traced to whoever made it, and an hourly
+alert emails the owner when a successful write or delete has happened. Check the routing:
+
+```bash
+az monitor diagnostic-settings subscription list --query "value[].name" -o tsv
+```
+
+On a new workspace the first rows can take 30 to 60 minutes to appear.
 
 ### 5. Defender plans and NIST CSF 2.0 (stage 02)
 
@@ -297,6 +311,10 @@ secret, so don't paste the URL anywhere.
   for that stage from your machine. CI plans but never applies. A change made
   outside the repo to anything stages 01, 02, 03, 04 or 06 manage shows up in the next
   night's drift issue.
+- **Watching who changes Azure:** an hourly alert emails the owner when the last hour
+  held any successful administrative write or delete; its query returns each one with
+  its caller. After it fires it stays quiet for six hours, so a burst of changes sends
+  one email. The Activity Log keeps every change either way.
 - **Escalating a control:** each Audit or Deny policy's effect, and stage 06's
   remediation mode, is a Terraform variable. New controls start at Audit, and
   moving one to Deny or to enforce is a one-line, reviewed pull request.
@@ -388,6 +406,12 @@ Additions:
   state resource group, so [`bootstrap.sh`](labs/03-foundation/bootstrap.sh) now
   tags it with an owner ([PR #4](https://github.com/gregorywilsonjr/cgeaz/pull/4)).
 - **Branch protection** that requires all five gate checks, for admins too.
+- **The second detector, scheduled.** Drift detection asks whether Azure still
+  matches the code; this asks who changed it. The Activity Log routing came from a
+  script, and the who-changed-what query was run by hand. Both now live in stage 01:
+  the routing adopted with `terraform import` rather than recreated, and an hourly
+  alert that emails the owner when something changed; its query names who changed it
+  ([monitoring.tf](stages/01-foundation/monitoring.tf)).
 - **A live evidence page** ([EVIDENCE.md](docs/EVIDENCE.md)) built from real command
   output by [`scripts/capture-evidence.sh`](scripts/capture-evidence.sh). The script
   redacts personal identifiers and refuses to write the page if any slip through.
@@ -415,8 +439,8 @@ az ad app delete --id "$(az ad app list --display-name "github-cgeaz-$GH_OWNER" 
 ```
 
 Destroying stage 02 turns the Defender plans back to Free. The budget, the
-Activity Log routing, the auditor group and `rg-grc-tfstate` were made by script or
-by hand, so remove them the same way if you want an empty subscription again.
+auditor group and `rg-grc-tfstate` were made by script or by hand, so remove them
+the same way if you want an empty subscription again.
 
 ## Credits
 
