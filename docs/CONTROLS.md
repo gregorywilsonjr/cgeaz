@@ -76,13 +76,13 @@ the code next to each policy.
 
 | Control | What it prevents or catches | Code | CSF 2.0 |
 |---|---|---|---|
-| `compliance-gate` workflow and branch protection | Nothing merges to `main` until stages 01, 03, 04 and 06 plan cleanly and pass every rule below; admins included | [gate.yml](../.github/workflows/gate.yml) | PR.PS, GV.PO |
+| `compliance-gate` workflow and branch protection | Nothing merges to `main` until stages 01, 02, 03, 04 and 06 plan cleanly and pass every rule below; admins included | [gate.yml](../.github/workflows/gate.yml) | PR.PS, GV.PO |
 | `storage.rego` | A Terraform storage account that allows public blob access, or shared keys outside the Function runtime exception | [storage.rego](../policy/storage.rego) | PR.DS |
-| `policy_identity.rego` | A policy assignment without an identity, whose remediation would silently never run | [policy_identity.rego](../policy/policy_identity.rego) | PR.PS |
+| `policy_identity.rego` | A policy assignment without an identity, whose remediation would silently never run. Audit-only assignments that need none, such as `nist-csf-20`, are listed in the rule as data, each one a reviewed exception | [policy_identity.rego](../policy/policy_identity.rego) | PR.PS |
 | `broad_roles.rego` | An Owner or Contributor role assignment in Terraform | [broad_roles.rego](../policy/broad_roles.rego) | PR.AA |
-| `drift-detection` workflow (nightly, 08:00 UTC) | Azure no longer matching the code; a drifted stage opens a GitHub issue labeled `drift` | [drift.yml](../.github/workflows/drift.yml) | DE.CM |
+| `drift-detection` workflow (nightly, 08:00 UTC) | Azure no longer matching the code, in all five stages. A drifted stage opens a GitHub issue labeled `drift`, with the owner email redacted, and fails the run; so does a plan that errors, so a broken detector can't pass | [drift.yml](../.github/workflows/drift.yml) | DE.CM |
 | "Who is touching Azure" Activity Log query | Changes by anyone, human or identity, counted by caller | [EVIDENCE.md](EVIDENCE.md#7-drift-detection-in-both-directions) | DE.CM, DE.AE |
-| Evidence script | Regenerates the proof page from live output and refuses to publish personal identifiers | [capture-evidence.sh](../scripts/capture-evidence.sh) | GV.OV |
+| Evidence script | Regenerates the proof page from live output and refuses to publish personal identifiers. In CI the owner email is a secret, so run logs mask it | [capture-evidence.sh](../scripts/capture-evidence.sh) | GV.OV |
 
 ## My three controls
 
@@ -137,6 +137,17 @@ found and how that was closed.
 | `cge-require-owner-tag-rg` | `rg-grc-tfstate` had no `owner` tag | Low | `bootstrap.sh` tags the group ([PR #4](https://github.com/gregorywilsonjr/cgeaz/pull/4)) | Compliant, 2026-09-20 ([evidence](EVIDENCE.md#8-policy-compliance-right-now)) |
 | `cge-storage-min-tls12` | Seed storage account declared TLS 1.0 | Low | `az storage account update --min-tls-version TLS1_2`, recorded in the Activity Log | Compliant, 2026-09-20 ([evidence](EVIDENCE.md#8-policy-compliance-right-now)) |
 | `cge-cosmos-disable-local-auth` | None | n/a | n/a | Compliant since the first scan |
+
+## Pipeline findings
+
+Found by testing the pipeline's own guardrails rather than by a policy scan.
+
+| Guardrail | Finding | Severity | Fix | Confirmed |
+|---|---|---|---|---|
+| `policy_identity.rego` | Never fired. It tested `not after.identity`, but a plan writes a block you left out as `[]`, and `not []` is false in Rego | Medium | `object.get(after, "identity", [])`, with the audit-only `nist-csf-20` exempted as data | A fixture assignment with an empty identity now fails the gate, 2026-09-21 |
+| `drift-detection` | A plan that errored opened no issue and passed | Medium | An error and found drift each fail the run with their own message | Controlled drift test, recorded in [EVIDENCE.md](EVIDENCE.md#7-drift-detection-in-both-directions) |
+| CI run logs | `OWNER_EMAIL` was a repository variable, so every run printed it in each step's environment, on a public repo | Low | Stored as a secret, which GitHub masks | Run logs show `***` from 2026-09-21 |
+| `guide-ci` | Never enabled on the fork, so the docs check and the nightly canary had never run | Low | Enabled, and the README's arming step now enables all three workflows | First run green, 2026-09-21 |
 
 ## Limitations
 
