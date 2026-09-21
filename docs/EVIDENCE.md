@@ -2,7 +2,7 @@
 
 Live proof for the claims in the [README](../README.md#proof-points) and
 [ARCHITECTURE.md](ARCHITECTURE.md). Every block below is real output from this
-pipeline's subscription, captured at 2026-09-20T07:28:31Z by
+pipeline's subscription, captured at 2026-09-21T16:51:54Z by
 [`scripts/capture-evidence.sh`](../scripts/capture-evidence.sh). The first line of
 each block is the command that produced it. The owner email, subscription ID, tenant
 ID and my Entra object ID are replaced with placeholders.
@@ -33,22 +33,22 @@ RetentionDays    State
 ```text
 $ az storage blob upload --account-name "$STG" --container-name reports --name "$PROBE" --file "$TMP/probe.txt" --auth-mode login -o none && echo "uploaded $PROBE"
 Alive[################################################################]  100.0000%Finished[#############################################################]  100.0000%
-uploaded evidence/worm-probe-20260920T072832Z.txt
+uploaded evidence/worm-probe-20260921T165157Z.txt
 ```
 
 ```text
 $ az storage blob delete --account-name "$STG" --container-name reports --name "$PROBE" --auth-mode login
 ERROR: This operation is not permitted as the blob is immutable due to a policy.
-RequestId:bd1c32f9-b01e-0048-4fd1-4878a7000000
-Time:2026-09-20T07:28:35.9740801Z
+RequestId:7012b3d8-d01e-002c-34e9-49893f000000
+Time:2026-09-21T16:52:04.1142508Z
 ErrorCode:BlobImmutableDueToPolicy
 ```
 
 ```text
 $ az storage blob upload --account-name "$STG" --container-name reports --name "$PROBE" --file "$TMP/overwrite.txt" --auth-mode login --overwrite -o none
 ERROR: This operation is not permitted as the blob is immutable due to a policy.
-RequestId:cdf62d06-401e-004c-06d1-48f5a0000000
-Time:2026-09-20T07:28:36.8782047Z
+RequestId:60d6229f-e01e-0027-28e9-497254000000
+Time:2026-09-21T16:52:04.9907420Z
 ErrorCode:BlobImmutableDueToPolicy
 If you want to overwrite the existing one, please add --overwrite in your command.
 ```
@@ -57,7 +57,7 @@ If you want to overwrite the existing one, please add --overwrite in your comman
 $ az storage blob show --account-name "$STG" --container-name reports --name "$PROBE" --auth-mode login --query "{name:name, created:properties.creationTime, lastModified:properties.lastModified}" -o table
 Name                                      Created                    LastModified
 ----------------------------------------  -------------------------  -------------------------
-evidence/worm-probe-20260920T072832Z.txt  2026-09-20T07:28:35+00:00  2026-09-20T07:28:35+00:00
+evidence/worm-probe-20260921T165157Z.txt  2026-09-21T16:51:58+00:00  2026-09-21T16:51:58+00:00
 ```
 
 ## 2. Every report number traces to a stored query
@@ -72,8 +72,10 @@ timers went live. The query runs as me, through the data-plane role stage 03 gra
 |---|---|---|---|---|
 | `poam/2026/09/poam-2026-09-20.json` | `2ef7fe8c-4e43-4cf3-aa72-fa4aa2c0e91b` | 32 | 0 | no |
 | `sar/2026/09/sar-2026-09-20.md` | `2ef7fe8c-4e43-4cf3-aa72-fa4aa2c0e91b` | 32 | 0 | no |
+| `poam/2026/09/poam-2026-09-21.json` | `f6dd764d-e55c-4420-9ee7-2a2f49670bf2` | 54 | 54 | yes |
+| `sar/2026/09/sar-2026-09-21.md` | `f6dd764d-e55c-4420-9ee7-2a2f49670bf2` | 54 | 54 | yes |
 
-0 of 2 reports reproduce from the store today.
+2 of 4 reports reproduce from the store today.
 A report that doesn't reproduce was built from documents that a later collection run overwrote.
 
 ## 3. Collection lineage
@@ -82,21 +84,21 @@ The newest collection run, what it wrote, and one of its documents with its run
 stamps. Also the document count in each container.
 
 ```text
-assessments  58 documents
+assessments  216 documents
 frameworks   7 documents
 mappings     0 documents
 
-newest run:   297f9d16-e24c-4dcb-ba2e-3a424e265425
-collected at: 2026-09-20T05:00:00.824671+00:00
-documents:    58  by status: {'Healthy': 17, 'NotApplicable': 8, 'Unhealthy': 33}
-unhealthy by severity: {'High': 4, 'Low': 8, 'Medium': 9, 'Unknown': 12}
+newest run:   f6dd764d-e55c-4420-9ee7-2a2f49670bf2
+collected at: 2026-09-21T05:00:01.421521+00:00
+documents:    100  by status: {'Healthy': 40, 'NotApplicable': 6, 'Unhealthy': 54}
+unhealthy by severity: {'High': 5, 'Low': 16, 'Medium': 22, 'Unknown': 11}
 ```
 
 ```json
 {
-  "id": "544e3e08a54acb3880031264d588ea19",
-  "runId": "297f9d16-e24c-4dcb-ba2e-3a424e265425",
-  "collectedAt": "2026-09-20T05:00:00.824671+00:00",
+  "id": "5e80ee2a012e096ca4ff7139a70adad2",
+  "runId": "f6dd764d-e55c-4420-9ee7-2a2f49670bf2",
+  "collectedAt": "2026-09-21T05:00:01.421521+00:00",
   "assessmentId": "cdc78c07-02b0-4af0-1cb2-cb7c672a8b0a",
   "displayName": "Storage account should use a private link connection",
   "status": "Unhealthy",
@@ -105,22 +107,27 @@ unhealthy by severity: {'High': 4, 'Low': 8, 'Medium': 9, 'Unknown': 12}
 }
 ```
 
-## 4. The preventive control fires
+## 4. The preventive controls fire
 
-A live attempt to create a storage account that allows public blob access.
-`cge-deny-public-blob` is at Deny, so Azure refuses the request and nothing is created.
+Two live attempts to create a storage account that breaks a Deny policy. The first
+allows public blob access (`cge-deny-public-blob`); the second declares no minimum
+TLS version (`cge-storage-min-tls12`). Azure refuses both and nothing is created.
+The last block is the other side of the TLS control: a tag-only update to the seed
+account, which already declares TLS 1.2, still goes through.
 
 ```text
-$ az policy assignment show --name cge-grc-baseline --scope /providers/Microsoft.Management/managementGroups/mg-grc-sandbox --query "parameters.publicBlobEffect.value" -o tsv
-Deny
+$ az policy assignment show --name cge-grc-baseline --scope /providers/Microsoft.Management/managementGroups/mg-grc-sandbox --query "{publicBlob:parameters.publicBlobEffect.value, storageTls:parameters.storageTlsEffect.value}" -o table
+PublicBlob    StorageTls
+------------  ------------
+Deny          Deny
 ```
 
 ```text
 $ az storage account create --name "$DENY_NAME" --resource-group rg-grc-sandbox-dev --location eastus --sku Standard_LRS --min-tls-version TLS1_2 --allow-blob-public-access true -o none 2>&1 | head -n 12
-ERROR: (RequestDisallowedByPolicy) Resource 'stgrcdeny0920072849' was disallowed by policy. Policy identifiers: '[{"policyAssignment":{"name":"CGE-AZ GRC Baseline","id":"/providers/Microsoft.Management/managementGroups/mg-grc-sandbox/providers/Microsoft.Authorization/policyAssignments/cge-grc-baseline"},"policyDefinition":{"name":"Storage accounts must not allow public blob access","id":"/providers/Microsoft.Management/managementGroups/mg-grc-sandbox/providers/Microsoft.Authorization/policyDefinitions/cge-deny-public-blob","version":"1.0.0"},"policySetDefinition":{"name":"CGE-AZ GRC Baseline","id":"/providers/Microsoft.Management/managementGroups/mg-grc-sandbox/providers/Microsoft.Authorization/policySetDefinitions/cge-grc-baseline","version":"1.0.0"}}]'.
+ERROR: (RequestDisallowedByPolicy) Resource 'stgrcdeny0921165217' was disallowed by policy. Policy identifiers: '[{"policyAssignment":{"name":"CGE-AZ GRC Baseline","id":"/providers/Microsoft.Management/managementGroups/mg-grc-sandbox/providers/Microsoft.Authorization/policyAssignments/cge-grc-baseline"},"policyDefinition":{"name":"Storage accounts must not allow public blob access","id":"/providers/Microsoft.Management/managementGroups/mg-grc-sandbox/providers/Microsoft.Authorization/policyDefinitions/cge-deny-public-blob","version":"1.0.0"},"policySetDefinition":{"name":"CGE-AZ GRC Baseline","id":"/providers/Microsoft.Management/managementGroups/mg-grc-sandbox/providers/Microsoft.Authorization/policySetDefinitions/cge-grc-baseline","version":"1.0.0"}}]'.
 Code: RequestDisallowedByPolicy
-Message: Resource 'stgrcdeny0920072849' was disallowed by policy. Policy identifiers: '[{"policyAssignment":{"name":"CGE-AZ GRC Baseline","id":"/providers/Microsoft.Management/managementGroups/mg-grc-sandbox/providers/Microsoft.Authorization/policyAssignments/cge-grc-baseline"},"policyDefinition":{"name":"Storage accounts must not allow public blob access","id":"/providers/Microsoft.Management/managementGroups/mg-grc-sandbox/providers/Microsoft.Authorization/policyDefinitions/cge-deny-public-blob","version":"1.0.0"},"policySetDefinition":{"name":"CGE-AZ GRC Baseline","id":"/providers/Microsoft.Management/managementGroups/mg-grc-sandbox/providers/Microsoft.Authorization/policySetDefinitions/cge-grc-baseline","version":"1.0.0"}}]'.
-Target: stgrcdeny0920072849
+Message: Resource 'stgrcdeny0921165217' was disallowed by policy. Policy identifiers: '[{"policyAssignment":{"name":"CGE-AZ GRC Baseline","id":"/providers/Microsoft.Management/managementGroups/mg-grc-sandbox/providers/Microsoft.Authorization/policyAssignments/cge-grc-baseline"},"policyDefinition":{"name":"Storage accounts must not allow public blob access","id":"/providers/Microsoft.Management/managementGroups/mg-grc-sandbox/providers/Microsoft.Authorization/policyDefinitions/cge-deny-public-blob","version":"1.0.0"},"policySetDefinition":{"name":"CGE-AZ GRC Baseline","id":"/providers/Microsoft.Management/managementGroups/mg-grc-sandbox/providers/Microsoft.Authorization/policySetDefinitions/cge-grc-baseline","version":"1.0.0"}}]'.
+Target: stgrcdeny0921165217
 Additional Information:Type: PolicyViolation
 Info: {
     "evaluationDetails": {
@@ -129,6 +136,29 @@ Info: {
                 "result": "True",
                 "expressionKind": "Field",
                 "expression": "type",
+```
+
+```text
+$ az storage account create --name "$TLS_NAME" --resource-group rg-grc-sandbox-dev --location eastus --sku Standard_LRS --allow-blob-public-access false -o none 2>&1 | head -n 12
+ERROR: (RequestDisallowedByPolicy) Resource 'stgrctls0921165217' was disallowed by policy. Policy identifiers: '[{"policyAssignment":{"name":"CGE-AZ GRC Baseline","id":"/providers/Microsoft.Management/managementGroups/mg-grc-sandbox/providers/Microsoft.Authorization/policyAssignments/cge-grc-baseline"},"policyDefinition":{"name":"Storage accounts must require TLS 1.2 or newer","id":"/providers/Microsoft.Management/managementGroups/mg-grc-sandbox/providers/Microsoft.Authorization/policyDefinitions/cge-storage-min-tls12","version":"1.0.0"},"policySetDefinition":{"name":"CGE-AZ GRC Baseline","id":"/providers/Microsoft.Management/managementGroups/mg-grc-sandbox/providers/Microsoft.Authorization/policySetDefinitions/cge-grc-baseline","version":"1.0.0"}}]'.
+Code: RequestDisallowedByPolicy
+Message: Resource 'stgrctls0921165217' was disallowed by policy. Policy identifiers: '[{"policyAssignment":{"name":"CGE-AZ GRC Baseline","id":"/providers/Microsoft.Management/managementGroups/mg-grc-sandbox/providers/Microsoft.Authorization/policyAssignments/cge-grc-baseline"},"policyDefinition":{"name":"Storage accounts must require TLS 1.2 or newer","id":"/providers/Microsoft.Management/managementGroups/mg-grc-sandbox/providers/Microsoft.Authorization/policyDefinitions/cge-storage-min-tls12","version":"1.0.0"},"policySetDefinition":{"name":"CGE-AZ GRC Baseline","id":"/providers/Microsoft.Management/managementGroups/mg-grc-sandbox/providers/Microsoft.Authorization/policySetDefinitions/cge-grc-baseline","version":"1.0.0"}}]'.
+Target: stgrctls0921165217
+Additional Information:Type: PolicyViolation
+Info: {
+    "evaluationDetails": {
+        "evaluatedExpressions": [
+            {
+                "result": "True",
+                "expressionKind": "Field",
+                "expression": "type",
+```
+
+```text
+$ az storage account update --name "$SEED_NAME" --resource-group rg-grc-sandbox-dev --set tags.lastcheck="$STAMP" --query "{name:name, minTls:minimumTlsVersion, lastcheck:tags.lastcheck}" -o table
+Name            MinTls    Lastcheck
+--------------  --------  -----------
+stgrcseed17735  TLS1_2    0921165217
 ```
 
 ## 5. The gate blocks non-compliant changes
@@ -188,11 +218,12 @@ fix-public-blob-1789871654  Succeeded  2026-09-20T02:34:16.504877+00:00  <owner>
 $ az monitor activity-log list --resource-id "$SEED_ID" --offset 89d --query "[?operationName.value=='Microsoft.Storage/storageAccounts/write' && status.value=='Succeeded'].{time:eventTimestamp, caller:caller}" -o table
 Time                          Caller
 ----------------------------  ------------------------------------
+2026-09-20T08:51:16.625313Z   <owner>
+2026-09-20T08:41:16.5693158Z  <owner>
 2026-09-20T06:31:17.6419393Z  <owner>
 2026-09-20T06:21:17.2792586Z  <owner>
 2026-09-20T02:35:43.6468259Z  <owner>
 2026-09-20T02:34:34.612041Z   c224b2bb-a300-413e-a666-525f7276beda
-2026-09-20T02:25:44.4561185Z  <owner>
 ```
 
 ## 7. Drift detection in both directions
@@ -202,6 +233,8 @@ covered stage; a plan with changes opens an issue labeled `drift`.
 
 ```text
 $ gh run list --repo "$GH_REPO" --workflow drift-detection --limit 14 --json createdAt,event,conclusion --jq ".[] | \"\(.createdAt)  \(.event)  \(.conclusion)\""
+2026-09-21T14:59:00Z  schedule  success
+2026-09-20T12:58:04Z  schedule  success
 2026-09-20T03:38:28Z  workflow_dispatch  success
 2026-09-20T03:23:27Z  workflow_dispatch  failure
 2026-09-20T03:17:26Z  workflow_dispatch  failure
@@ -209,7 +242,6 @@ $ gh run list --repo "$GH_REPO" --workflow drift-detection --limit 14 --json cre
 
 ```text
 $ gh issue list --repo "$GH_REPO" --label drift --state all --limit 20 || true
-the 'gregorywilsonjr/cgeaz' repository has disabled issues
 ```
 
 **Who is touching Azure?** Successful administrative writes and deletes over the last
@@ -220,7 +252,7 @@ the 'gregorywilsonjr/cgeaz' repository has disabled issues
 $ az monitor log-analytics query --workspace "$WS_ID" --analytics-query "$KQL" -o table
 Caller                                TableName      Changes
 ------------------------------------  -------------  ---------
-<owner>                 PrimaryResult  75
+<owner>                 PrimaryResult  77
 c224b2bb-a300-413e-a666-525f7276beda  PrimaryResult  17
 a6846247-77e6-4218-b713-508398a82650  PrimaryResult  10
 ```
@@ -245,15 +277,15 @@ $ az policy state list --filter "policyAssignmentName eq 'cge-grc-baseline' or p
 $ az policy state list --filter "policyDefinitionName eq 'cge-cosmos-disable-local-auth' or policyDefinitionName eq 'cge-require-owner-tag-rg' or policyDefinitionName eq 'cge-storage-min-tls12'" --query "[].{policy:policyDefinitionName, state:complianceState, evaluated:timestamp, resource:resourceId}" -o table
 Policy                         State      Evaluated                         Resource
 -----------------------------  ---------  --------------------------------  -----------------------------------------------------------------------------------------------------------------------------------------------------------------
-cge-storage-min-tls12          Compliant  2026-09-20T06:51:33.115681+00:00  /subscriptions/<subscription-id>/resourcegroups/rg-grc-sandbox-dev/providers/microsoft.storage/storageaccounts/stgrcseed17735
-cge-require-owner-tag-rg       Compliant  2026-09-20T06:22:55.165061+00:00  /subscriptions/<subscription-id>/resourcegroups/rg-grc-sandbox-dev
-cge-storage-min-tls12          Compliant  2026-09-20T06:07:07.621907+00:00  /subscriptions/<subscription-id>/resourcegroups/rg-grc-tfstate/providers/microsoft.storage/storageaccounts/stgrctfstateedc399bb
-cge-storage-min-tls12          Compliant  2026-09-20T06:05:19.140014+00:00  /subscriptions/<subscription-id>/resourcegroups/rg-grc-evidence-dev/providers/microsoft.storage/storageaccounts/stgrcrpt871cp7
-cge-storage-min-tls12          Compliant  2026-09-20T06:05:19.014283+00:00  /subscriptions/<subscription-id>/resourcegroups/rg-grc-evidence-dev/providers/microsoft.storage/storageaccounts/stgrcfunc4obhbq
-cge-storage-min-tls12          Compliant  2026-09-20T06:05:19.012482+00:00  /subscriptions/<subscription-id>/resourcegroups/rg-grc-evidence-dev/providers/microsoft.storage/storageaccounts/stgrcevid4obhbq
-cge-require-owner-tag-rg       Compliant  2026-09-20T06:05:17.666692+00:00  /subscriptions/<subscription-id>/resourcegroups/rg-grc-tfstate
-cge-require-owner-tag-rg       Compliant  2026-09-20T06:05:17.658099+00:00  /subscriptions/<subscription-id>/resourcegroups/rg-grc-evidence-dev
-cge-cosmos-disable-local-auth  Compliant  2026-09-20T06:05:14.681372+00:00  /subscriptions/<subscription-id>/resourcegroups/rg-grc-evidence-dev/providers/microsoft.documentdb/databaseaccounts/cosmos-grc-evidence-4obhbq
+cge-storage-min-tls12          Compliant  2026-09-21T02:29:02.873106+00:00  /subscriptions/<subscription-id>/resourcegroups/rg-grc-tfstate/providers/microsoft.storage/storageaccounts/stgrctfstateedc399bb
+cge-storage-min-tls12          Compliant  2026-09-21T02:29:02.335678+00:00  /subscriptions/<subscription-id>/resourcegroups/rg-grc-sandbox-dev/providers/microsoft.storage/storageaccounts/stgrcseed17735
+cge-storage-min-tls12          Compliant  2026-09-21T02:29:01.987594+00:00  /subscriptions/<subscription-id>/resourcegroups/rg-grc-evidence-dev/providers/microsoft.storage/storageaccounts/stgrcrpt871cp7
+cge-storage-min-tls12          Compliant  2026-09-21T02:29:01.626223+00:00  /subscriptions/<subscription-id>/resourcegroups/rg-grc-evidence-dev/providers/microsoft.storage/storageaccounts/stgrcfunc4obhbq
+cge-storage-min-tls12          Compliant  2026-09-21T02:29:01.474654+00:00  /subscriptions/<subscription-id>/resourcegroups/rg-grc-evidence-dev/providers/microsoft.storage/storageaccounts/stgrcevid4obhbq
+cge-require-owner-tag-rg       Compliant  2026-09-21T02:29:00.432938+00:00  /subscriptions/<subscription-id>/resourcegroups/rg-grc-tfstate
+cge-require-owner-tag-rg       Compliant  2026-09-21T02:29:00.430320+00:00  /subscriptions/<subscription-id>/resourcegroups/rg-grc-sandbox-dev
+cge-require-owner-tag-rg       Compliant  2026-09-21T02:29:00.427538+00:00  /subscriptions/<subscription-id>/resourcegroups/rg-grc-evidence-dev
+cge-cosmos-disable-local-auth  Compliant  2026-09-21T02:28:58.073538+00:00  /subscriptions/<subscription-id>/resourcegroups/rg-grc-evidence-dev/providers/microsoft.documentdb/databaseaccounts/cosmos-grc-evidence-4obhbq
 ```
 
 The TLS finding on the hand-made seed account, before and after its fix, as saved at the time:
