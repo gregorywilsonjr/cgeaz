@@ -20,7 +20,7 @@ env:
   ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
   ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
   TF_VAR_state_storage_account: ${{ vars.STATE_STORAGE_ACCOUNT }}
-  TF_VAR_owner_email: ${{ vars.OWNER_EMAIL }}
+  TF_VAR_owner_email: ${{ secrets.OWNER_EMAIL }}
   TF_VAR_deployer_object_id: ${{ vars.DEPLOYER_OBJECT_ID }}
 
 jobs:
@@ -35,17 +35,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        stage: [01-foundation, 03-evidence-store, 04-reporting, 06-enforcement]
+        stage: [01-foundation, 02-activation, 03-evidence-store, 04-reporting, 06-enforcement]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v4
         with:
           # The wrapper turns Terraform's exit code 2 ("changes found") into 0,
           # which silently disables drift detection. Off everywhere for honest exit codes.
           terraform_wrapper: false
 
-      - uses: azure/login@v2
+      - uses: azure/login@v3
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
@@ -63,15 +63,34 @@ jobs:
 
       - name: open drift issue
         if: steps.plan.outputs.exitcode == '2'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
+        env:
+          OWNER_EMAIL: ${{ secrets.OWNER_EMAIL }}
         with:
           script: |
             const fs = require('fs');
-            const body = fs.readFileSync('stages/${{ matrix.stage }}/plan-output.txt', 'utf8');
+            let body = fs.readFileSync('stages/${{ matrix.stage }}/plan-output.txt', 'utf8');
+            // A plan prints resource tags, and the owner tag holds a real email address.
+            // Issues on a public repo are public, so redact it exactly as
+            // scripts/capture-evidence.sh does before publishing anything.
+            const ownerEmail = process.env.OWNER_EMAIL;
+            if (ownerEmail) { body = body.split(ownerEmail).join('<owner>'); }
             await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
               title: `Drift detected: stages/${{ matrix.stage }} (${new Date().toISOString().slice(0,10)})`,
-              body: 'Reality no longer matches code. This is a change-management finding that generated itself.\n\n```\n' + body.slice(0, 60000) + '\n```',
+              body: 'Reality no longer matches code. This is a change-management finding that generated itself. The owner tag value is redacted to `<owner>`.\n\n```\n' + body.slice(0, 60000) + '\n```',
               labels: ['drift'],
             });
+
+      - name: fail when the detector itself could not run
+        if: steps.plan.outputs.exitcode != '0' && steps.plan.outputs.exitcode != '2'
+        run: |
+          echo "::error::Terraform could not evaluate drift for stages/${{ matrix.stage }} (exit code '${{ steps.plan.outputs.exitcode }}'). The detector is broken; this is not a statement about the environment."
+          exit 1
+
+      - name: fail when drift was found
+        if: steps.plan.outputs.exitcode == '2'
+        run: |
+          echo "::error::Drift detected for stages/${{ matrix.stage }}. This run opened an issue with the plan."
+          exit 1

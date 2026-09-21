@@ -18,7 +18,7 @@ env:
   ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
   ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
   TF_VAR_state_storage_account: ${{ vars.STATE_STORAGE_ACCOUNT }}
-  TF_VAR_owner_email: ${{ vars.OWNER_EMAIL }}
+  TF_VAR_owner_email: ${{ secrets.OWNER_EMAIL }}
   TF_VAR_deployer_object_id: ${{ vars.DEPLOYER_OBJECT_ID }}
 
 jobs:
@@ -33,17 +33,17 @@ jobs:
     strategy:
       fail-fast: false # every stage reports its own verdict; one failure doesn't cancel the rest
       matrix:
-        stage: [01-foundation, 03-evidence-store, 04-reporting, 06-enforcement]
+        stage: [01-foundation, 02-activation, 03-evidence-store, 04-reporting, 06-enforcement]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v4
         with:
           # The wrapper turns Terraform's exit code 2 ("changes found") into 0,
           # which silently disables drift detection. Off everywhere for honest exit codes.
           terraform_wrapper: false
 
-      - uses: azure/login@v2
+      - uses: azure/login@v3
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}

@@ -231,15 +231,16 @@ gh variable set AZURE_CLIENT_ID --body "$APP_ID" --repo "$GH_REPO"
 gh variable set AZURE_TENANT_ID --body "$(az account show --query tenantId -o tsv)" --repo "$GH_REPO"
 gh variable set AZURE_SUBSCRIPTION_ID --body "$ARM_SUBSCRIPTION_ID" --repo "$GH_REPO"
 gh variable set STATE_STORAGE_ACCOUNT --body "$TF_VAR_state_storage_account" --repo "$GH_REPO"
-gh variable set OWNER_EMAIL --body "$TF_VAR_owner_email" --repo "$GH_REPO"
+gh secret set OWNER_EMAIL --body "$TF_VAR_owner_email" --repo "$GH_REPO"
 gh variable set DEPLOYER_OBJECT_ID --body "$(az ad signed-in-user show --query id -o tsv)" --repo "$GH_REPO"
 gh api -X PUT "repos/$GH_REPO/actions/workflows/gate.yml/enable"
 gh api -X PUT "repos/$GH_REPO/actions/workflows/drift.yml/enable"
+gh api -X PUT "repos/$GH_REPO/actions/workflows/guide-ci.yml/enable"
 gh api -X PUT "repos/$GH_REPO/branches/main/protection" --input - <<'EOT'
 {
   "required_status_checks": {
     "strict": false,
-    "contexts": ["gate (01-foundation)", "gate (03-evidence-store)", "gate (04-reporting)", "gate (06-enforcement)"]
+    "contexts": ["gate (01-foundation)", "gate (02-activation)", "gate (03-evidence-store)", "gate (04-reporting)", "gate (06-enforcement)"]
   },
   "enforce_admins": true,
   "required_pull_request_reviews": null,
@@ -249,9 +250,11 @@ EOT
 ```
 
 These are repository variables, not secrets: with OIDC there's no credential to
-protect, only identifiers. `DEPLOYER_OBJECT_ID` names you as the deployer in CI's
+protect, only identifiers. The one exception is `OWNER_EMAIL`, a secret because it
+is personal data: GitHub masks secrets in run logs but never masks variables, and
+a public repository's logs are public. `DEPLOYER_OBJECT_ID` names you as the deployer in CI's
 plans, so they match the plans you run. Forks start with their workflows switched
-off, which is why the two `enable` calls are there. Branch protection makes all four
+off, which is why the three `enable` calls are there. Branch protection makes all five
 gate checks required on `main`, for admins too. To prove the gate works, open a pull
 request that adds a public storage account: the gate must fail it. Mine is
 [PR #1](https://github.com/gregorywilsonjr/cgeaz/pull/1), closed unmerged.
@@ -292,7 +295,7 @@ secret, so don't paste the URL anywhere.
 
 - **Changing anything:** branch, pull request, gate, merge, then `terraform apply`
   for that stage from your machine. CI plans but never applies. A change made
-  outside the repo to anything stages 01, 03, 04 or 06 manage shows up in the next
+  outside the repo to anything stages 01, 02, 03, 04 or 06 manage shows up in the next
   night's drift issue.
 - **Escalating a control:** each Audit or Deny policy's effect, and stage 06's
   remediation mode, is a Terraform variable. New controls start at Audit, and
@@ -355,6 +358,21 @@ Fixes, each one found by running the pipeline for real:
   name after it's freed, but an ID is never reused.
 - **One failing stage hid the others.** The gate cancelled the remaining stages
   when one failed. With `fail-fast` off, every stage reports its own verdict.
+- **Stage 02 and the docs check never ran in CI.** The workflows' stage lists
+  predate stage 02, and a fork starts with every workflow off while the arming
+  step enabled only two of the three. Stage 02 is now in the gate, drift detection
+  and the nightly canary, and all three workflows are enabled.
+- **A gate rule could never fire.** `policy_identity.rego` tested
+  `not after.identity`, but a plan writes a block you left out as an empty list,
+  and `not []` is false in Rego, so an assignment with no identity passed. The rule
+  now reads it with `object.get` and a default, and exempts the audit-only
+  `nist-csf-20` assignment as data ([policy_identity.rego](policy/policy_identity.rego)).
+- **Drift detection could pass while broken.** A plan that errored produced no
+  issue and a green run. An error and found drift now each fail the run with their
+  own message, and the issue's plan output has the owner email redacted.
+- **My email was in every CI log.** `OWNER_EMAIL` was a repository variable, and
+  GitHub prints each step's environment in the log but never masks variables. It
+  is now a secret, which GitHub masks.
 
 Additions:
 
@@ -368,7 +386,7 @@ Additions:
 - **A fix at the source for my own finding.** The owner-tag control flagged the
   state resource group, so [`bootstrap.sh`](labs/03-foundation/bootstrap.sh) now
   tags it with an owner ([PR #4](https://github.com/gregorywilsonjr/cgeaz/pull/4)).
-- **Branch protection** that requires all four gate checks, for admins too.
+- **Branch protection** that requires all five gate checks, for admins too.
 - **A live evidence page** ([EVIDENCE.md](docs/EVIDENCE.md)) built from real command
   output by [`scripts/capture-evidence.sh`](scripts/capture-evidence.sh). The script
   redacts personal identifiers and refuses to write the page if any slip through.

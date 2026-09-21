@@ -39,11 +39,11 @@ order.
 | Stage | State file | What it owns | Reads | CI coverage |
 |---|---|---|---|---|
 | [`bootstrap.sh`](../labs/03-foundation/bootstrap.sh) | none (it creates the state store) | `rg-grc-tfstate` and the state storage account: versioned, TLS 1.2, no public access. Terraform reaches it with Entra ID, not account keys | nothing | none (run once, by hand) |
-| [`01-foundation`](../stages/01-foundation) | `01-foundation.tfstate` | `mg-grc` -> `mg-grc-sandbox` -> subscription, the sandbox and evidence resource groups, `law-grc-sandbox`, the six-policy initiative assigned at `mg-grc-sandbox`, the remediation identity | nothing | gate and drift |
-| [`02-activation`](../stages/02-activation) | `02-activation.tfstate` | Defender for Storage and Defender for Key Vault at Standard, the NIST CSF 2.0 assignment on the subscription | nothing | none yet ([gap 1](#known-gaps-and-trade-offs)) |
-| [`03-evidence-store`](../stages/03-evidence-store) | `03-evidence-store.tfstate` | Cosmos DB (`grc` database: `assessments`, `frameworks`, `mappings`), evidence storage with the WORM `reports` container, the collector Function App | 01 | gate and drift |
-| [`04-reporting`](../stages/04-reporting) | `04-reporting.tfstate` | the reporter Function App | 01, 03 | gate and drift |
-| [`06-enforcement`](../stages/06-enforcement) | `06-enforcement.tfstate` | the `cge-fix-public-blob` Modify policy, the `remediation_mode` ladder, the remediation identity's storage role | 01 | gate and drift |
+| [`01-foundation`](../stages/01-foundation) | `01-foundation.tfstate` | `mg-grc` -> `mg-grc-sandbox` -> subscription, the sandbox and evidence resource groups, `law-grc-sandbox`, the six-policy initiative assigned at `mg-grc-sandbox`, the remediation identity | nothing | gate, drift and canary |
+| [`02-activation`](../stages/02-activation) | `02-activation.tfstate` | Defender for Storage and Defender for Key Vault at Standard, the NIST CSF 2.0 assignment on the subscription | nothing | gate, drift and canary |
+| [`03-evidence-store`](../stages/03-evidence-store) | `03-evidence-store.tfstate` | Cosmos DB (`grc` database: `assessments`, `frameworks`, `mappings`), evidence storage with the WORM `reports` container, the collector Function App | 01 | gate, drift and canary |
+| [`04-reporting`](../stages/04-reporting) | `04-reporting.tfstate` | the reporter Function App | 01, 03 | gate, drift and canary |
+| [`06-enforcement`](../stages/06-enforcement) | `06-enforcement.tfstate` | the `cge-fix-public-blob` Modify policy, the `remediation_mode` ladder, the remediation identity's storage role | 01 | gate, drift and canary |
 
 Function code isn't Terraform. After stages 03 and 04 apply, the collector and
 report code deploy with `az functionapp deployment source config-zip`.
@@ -56,7 +56,7 @@ here so nothing is invisible:
 | Piece | Created by | Why it isn't in Terraform |
 |---|---|---|
 | Terraform state storage | [`bootstrap.sh`](../labs/03-foundation/bootstrap.sh) | State can't store itself. The script is safe to re-run. |
-| Activity Log routing to `law-grc-sandbox` | [`route-activity-log.sh`](../labs/02-toolkit/route-activity-log.sh) | Not yet: moving it into stage 01 is [gap 2](#known-gaps-and-trade-offs) |
+| Activity Log routing to `law-grc-sandbox` | [`route-activity-log.sh`](../labs/02-toolkit/route-activity-log.sh) | Not yet: moving it into stage 01 is [gap 1](#known-gaps-and-trade-offs) |
 | Monthly budget ($10, alerts at 80% actual and 100% forecast) | [`create-budget.sh`](../labs/01-sandbox/create-budget.sh) | A cost guardrail for the lab, not a control. The script calls the API because the CLI's budget command is broken |
 | `grc-auditors` group and its Reader role | Lab 1 commands | Entra groups need the `azuread` provider, which no stage uses yet |
 | Seed storage account (`stgrcseed...`) | Lab 2 command | Deliberately hand-made: Lab 6 needs an account outside code to break and repair |
@@ -93,9 +93,11 @@ flowchart LR
 |---|---|---|
 | 05:00 daily | collector | collector Function App |
 | 06:00 daily | POA&M | reporter Function App |
+| 07:00 daily | canary: `terraform validate` on every stage, no credentials | GitHub Actions |
 | 07:00 Mondays | SAR | reporter Function App |
 | 08:00 daily | drift detection | GitHub Actions |
 | every pull request | compliance gate | GitHub Actions |
+| every pull request that touches the docs | guide check: code blocks and links | GitHub Actions |
 
 ## Identity boundaries
 
@@ -120,15 +122,16 @@ exception to "shared keys off."
 ## How a change reaches Azure
 
 1. I make the change on a branch and open a pull request.
-2. The `compliance-gate` workflow plans stages 01, 03, 04 and 06 as the GitHub
+2. The `compliance-gate` workflow plans stages 01, 02, 03, 04 and 06 as the GitHub
    identity, then runs `conftest` with the rules in [`policy/`](../policy) against
-   each plan. All four checks are required on `main`, with no admin bypass.
-3. I merge (squash) only when all four pass.
+   each plan. All five checks are required on `main`, with no admin bypass.
+3. I merge (squash) only when all five pass.
 4. I run `terraform apply` for the changed stage from my machine. CI plans; it
    never applies.
-5. Every night `drift-detection` plans the same four stages with
+5. Every night `drift-detection` plans the same five stages with
    `-detailed-exitcode`. If reality no longer matches the code, it opens a GitHub
-   issue labeled `drift` with the plan output.
+   issue labeled `drift` with the plan output, the owner email redacted, and fails
+   the run. If a plan errors, the run fails with that error instead of passing.
 6. The Activity Log in `law-grc-sandbox` records who made each change, human or
    identity.
 
@@ -144,7 +147,10 @@ Why the non-obvious choices were made. Control-specific reasoning lives in
    tier (with `azapi`, since azurerm has no data source for it) before changing
    anything. Its resources loop over the whole baseline, not over "what was
    missing." Looping over the gap would make the next plan destroy the plans the
-   last apply enabled.
+   last apply enabled. Its outputs are what discovery saw at plan time, so an apply
+   that changes a tier leaves them one step behind until the next apply, and drift
+   detection reports stage 02 until then. That report is correct: the saved state
+   really is stale.
 3. **Adopt, don't recreate.** The governance resources built by hand in Labs 1
    and 2 (management groups, the sandbox resource group, the workspace, the
    Defender plan, the CSF assignment) were imported into state instead of being
@@ -175,27 +181,24 @@ Why the non-obvious choices were made. Control-specific reasoning lives in
 
 This pipeline's own POA&M. Each item says what the fix would be.
 
-1. **Stage 02 isn't in the gate or drift detection.** The course added stage 02
-   after the workflows were written, and their stage lists were never updated.
-   Fix: add `02-activation` to both workflow matrices.
-2. **"Who is touching reality" isn't scheduled.** The Activity Log reaches
+1. **"Who is touching reality" isn't scheduled.** The Activity Log reaches
    `law-grc-sandbox`, but the KQL query that shows who changed what is run by
    hand, and the routing itself was created by a script, so drift detection
    can't see it. Fix: move the routing and a scheduled query alert into stage 01.
-3. **The POA&M owner column is a placeholder.** Every resource group now carries
+2. **The POA&M owner column is a placeholder.** Every resource group now carries
    an `owner` tag (my `cge-require-owner-tag-rg` control), but the generator
    doesn't resolve it yet. Reports may only read the store, so the fix belongs in
    the collector: record the owner tag on each assessment document.
-4. **The CI identity is broader than planning needs.** It holds Contributor at
+3. **The CI identity is broader than planning needs.** It holds Contributor at
    `mg-grc` because azurerm's refresh lists storage account keys and Function App
    settings, which Reader can't do. It can't write RBAC or policy, and nothing in
    CI applies. Tighter option: a custom role with Reader plus those two list
    actions.
-5. **The remediation identity's storage role is broader than its one job.** The
+4. **The remediation identity's storage role is broader than its one job.** The
    Modify policy writes a single property, but Storage Account Contributor can
    manage whole storage accounts, including listing keys. It's the narrowest
    built-in role that can write that property, and stage 06 grants it only when
    remediation can actually run. Tighter option: a custom role.
-6. **The WORM policy is unlocked,** so the course teardown can delete it. In
+5. **The WORM policy is unlocked,** so the course teardown can delete it. In
    production I would lock it; after that, nobody can shorten or remove the
    retention period.
