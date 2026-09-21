@@ -335,7 +335,8 @@ Fixes, each one found by running the pipeline for real:
   from run to run, so every night's collection overwrote the one before it, and a
   report's numbers could only be reproduced until the next run. The collector now
   puts the run ID in every document ID, so every run is kept and any report can be
-  re-checked against the run it was built from.
+  re-checked against the run it was built from. The incident, from detection to
+  closure, is in [INCIDENT-001](docs/INCIDENT-001-REPORT-LINEAGE.md).
 - **CI couldn't run.** The workflows read `backend.hcl`, which is gitignored, so
   `terraform init` failed. They now pass the backend settings inline, with the state
   account's name from a repository variable. The gate's conftest action was a 2020

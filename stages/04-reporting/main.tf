@@ -4,6 +4,7 @@ locals {
   cosmos_id        = data.terraform_remote_state.evidence.outputs.cosmos_account_id
   cosmos_name      = data.terraform_remote_state.evidence.outputs.cosmos_account_name
   evidence_storage = data.terraform_remote_state.evidence.outputs.evidence_storage_account
+  report_container = data.terraform_remote_state.evidence.outputs.reports_container
   common_tags = {
     env     = var.environment
     purpose = "grc-reporting"
@@ -63,7 +64,7 @@ resource "azurerm_linux_function_app" "reporting" {
     "COSMOS_ENDPOINT"                = local.cosmos_endpoint
     "COSMOS_DATABASE"                = "grc"
     "REPORTS_ACCOUNT_URL"            = data.azurerm_storage_account.evidence.primary_blob_endpoint
-    "REPORTS_CONTAINER"              = "reports"
+    "REPORTS_CONTAINER"              = local.report_container
     "SCM_DO_BUILD_DURING_DEPLOYMENT" = "true"
     # ENABLE_ORYX_BUILD intentionally omitted: `az functionapp deployment source config-zip --build-remote` deletes it on every deploy.
   }
