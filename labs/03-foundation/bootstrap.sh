@@ -2,6 +2,12 @@
 # Bootstrap the Terraform remote-state storage for the CGE-AZ pipeline.
 # Run once, before your first `terraform init` in stages/01-foundation.
 # Chicken-and-egg: state storage can't manage itself, so this one piece is a script.
+#
+# State holds secrets, so this account meets the evidence storage's standard: Entra ID
+# sign-in only (shared keys off, so a role that can list account keys is no way in),
+# every state change kept as a version, and a deleted state file or container
+# recoverable for 7 days. policy/storage.rego requires keys off for every storage
+# account in a plan; this one is in no plan, so the script sets it.
 set -euo pipefail
 
 LOCATION="${LOCATION:-eastus}"
@@ -20,7 +26,7 @@ echo ">> State resource group: $RG_STATE"
 az group create --name "$RG_STATE" --location "$LOCATION" \
   --tags env=shared purpose=terraform-state owner="$OWNER" --output none
 
-echo ">> State storage account: $SA_NAME (versioned, no public blob access)"
+echo ">> State storage account: $SA_NAME (Entra ID only, no public blob access)"
 az storage account create \
   --name "$SA_NAME" \
   --resource-group "$RG_STATE" \
@@ -29,16 +35,22 @@ az storage account create \
   --kind StorageV2 \
   --min-tls-version TLS1_2 \
   --allow-blob-public-access false \
+  --allow-shared-key-access false \
   --tags env=shared purpose=terraform-state owner="$OWNER" \
   --output none
 
-echo ">> Enabling blob versioning (every state change becomes a recoverable version)"
+echo ">> Versioning and 7-day soft delete (every state change is kept, and a deleted state file or container can be restored)"
 az storage account blob-service-properties update \
   --account-name "$SA_NAME" \
   --resource-group "$RG_STATE" \
   --enable-versioning true \
+  --enable-delete-retention true \
+  --delete-retention-days 7 \
+  --enable-container-delete-retention true \
+  --container-delete-retention-days 7 \
   --output none
 
+# Signs in as you (--auth-mode login): the account accepts no keys.
 echo ">> State container: $CONTAINER"
 az storage container create \
   --name "$CONTAINER" \

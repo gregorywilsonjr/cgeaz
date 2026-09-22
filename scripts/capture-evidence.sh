@@ -51,8 +51,9 @@ REPORTER_PID=$(tf_out 04-reporting reporter_principal_id)
 REMEDIATION_PID=$(tf_out 01-foundation remediation_identity_principal_id)
 CI_APP_ID=$(az ad app list --display-name "github-cgeaz-${GH_REPO%%/*}" --query "[0].appId" -o tsv)
 CI_SP_ID=$(az ad sp show --id "$CI_APP_ID" --query id -o tsv 2>/dev/null)
+STATE_SA=$(az storage account list --resource-group rg-grc-tfstate --query "[0].name" -o tsv)
 for v in GH_REPO SUB_ID TENANT_ID ME_ID STG COSMOS_NAME COSMOS_ENDPOINT COLLECTOR_PID \
-         REPORTER_PID REMEDIATION_PID CI_APP_ID CI_SP_ID; do
+         REPORTER_PID REMEDIATION_PID CI_APP_ID CI_SP_ID STATE_SA; do
   if [ -z "${!v}" ]; then
     echo "Could not resolve $v. Are az and gh signed in, and is every stage initialised?" >&2
     exit 1
@@ -82,7 +83,8 @@ say "# Evidence" "" \
   "| \`REMEDIATION_PID\` (\`id-grc-remediation-dev\`) | \`$REMEDIATION_PID\` |" \
   "| \`COLLECTOR_PID\` (collector Function) | \`$COLLECTOR_PID\` |" \
   "| \`REPORTER_PID\` (reporter Function) | \`$REPORTER_PID\` |" \
-  "| \`CI_SP_ID\` (GitHub Actions; app ID \`$CI_APP_ID\`) | \`$CI_SP_ID\` |"
+  "| \`CI_SP_ID\` (GitHub Actions; app ID \`$CI_APP_ID\`) | \`$CI_SP_ID\` |" \
+  "| \`STATE_SA\` (Terraform state storage account) | \`$STATE_SA\` |"
 
 echo ">> 1/10 WORM"
 say "" "## 1. Reports can't be changed or deleted" "" \
@@ -315,12 +317,18 @@ fi
 echo ">> 9/10 identity whitelists"
 say "" "## 9. What each pipeline identity is allowed to do" "" \
   "Live role assignments (control plane) for each pipeline identity, then the Cosmos" \
-  "data-plane grants."
+  "data-plane grants and the Terraform state account's settings."
 block 'az role assignment list --assignee "$COLLECTOR_PID" --all --query "[].{role:roleDefinitionName, scope:scope}" -o table'
 block 'az role assignment list --assignee "$REPORTER_PID" --all --query "[].{role:roleDefinitionName, scope:scope}" -o table'
 block 'az role assignment list --assignee "$REMEDIATION_PID" --all --query "[].{role:roleDefinitionName, scope:scope}" -o table'
 block 'az role assignment list --assignee "$CI_SP_ID" --all --query "[].{role:roleDefinitionName, scope:scope}" -o table'
 block 'az cosmosdb sql role assignment list --account-name "$COSMOS_NAME" --resource-group rg-grc-evidence-dev --query "[].{principal:principalId, role:roleDefinitionId}" -o table'
+say "" "Terraform state accepts Entra ID sign-in only, so reading or writing it takes a blob" \
+  "data role, like CI's Storage Blob Data Contributor above; the account's keys don't work." \
+  "Every version of each state file is kept, and a deleted state file or the container can" \
+  "be restored for 7 days."
+block 'az storage account show --name "$STATE_SA" --resource-group rg-grc-tfstate --query "{sharedKeyAccess:allowSharedKeyAccess, minTls:minimumTlsVersion, publicBlobAccess:allowBlobPublicAccess}" -o table'
+block 'az storage account blob-service-properties show --account-name "$STATE_SA" --resource-group rg-grc-tfstate --query "{versioning:isVersioningEnabled, blobSoftDeleteDays:deleteRetentionPolicy.days, containerSoftDeleteDays:containerDeleteRetentionPolicy.days}" -o table'
 
 echo ">> 10/10 framework crosswalk"
 say "" "## 10. The framework crosswalk is data, and it is checked" "" \

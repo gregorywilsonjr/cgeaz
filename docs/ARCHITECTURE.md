@@ -55,7 +55,7 @@ here so nothing is invisible:
 
 | Piece | Created by | Why it isn't in Terraform |
 |---|---|---|
-| Terraform state storage | [`bootstrap.sh`](../labs/03-foundation/bootstrap.sh) | State can't store itself. The script is safe to re-run. |
+| Terraform state storage | [`bootstrap.sh`](../labs/03-foundation/bootstrap.sh) | State can't store itself. The script is safe to re-run, and it sets the account's hardening: Entra ID sign-in only, versioning, and 7-day soft delete for state files and the container |
 | Monthly budget ($10, alerts at 80% actual and 100% forecast) | [`create-budget.sh`](../labs/01-sandbox/create-budget.sh) | A cost guardrail for the lab, not a control. The script calls the API because the CLI's budget command is broken |
 | `grc-auditors` group and its Reader role | Lab 1 commands | Entra groups need the `azuread` provider, which no stage uses yet |
 | Seed storage account (`stgrcseed...`) | Lab 2 command | Deliberately hand-made: Lab 6 needs an account outside code to break and repair |
@@ -117,7 +117,8 @@ no identity both records evidence and writes reports. Gaps 4 and 5 under
 The two Function Apps also use their own small storage accounts for runtime
 plumbing, connected with an account key (`storage_account_access_key`). Those
 accounts hold no evidence, and the gate's storage rule names them as the only
-exception to "shared keys off."
+exception to "shared keys off." The Terraform state account is in no plan, so the
+gate never sees it; `bootstrap.sh` turns its keys off instead.
 
 ## How a change reaches Azure
 
@@ -170,8 +171,8 @@ Why the non-obvious choices were made. Control-specific reasoning lives in
    can't be reproduced at audit time. A number that came from a stored document
    can, by running the same query.
 7. **Zero stored credentials.** No credential is stored in this repo or in
-   GitHub. Cosmos local auth is off, the evidence storage has shared keys off, and
-   CI signs in with OIDC. The one key the design uses is each Function App's
+   GitHub. Cosmos local auth is off, the evidence and state storage have shared keys
+   off, and CI signs in with OIDC. The one key the design uses is each Function App's
    connection to its own runtime storage, which Azure keeps in the app's settings.
 8. **Deliberate effects, reviewed escalation.** New controls start at Audit and
    move to Deny only once every existing resource passes. Stage 06 climbs
