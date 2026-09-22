@@ -84,7 +84,7 @@ say "# Evidence" "" \
   "| \`REPORTER_PID\` (reporter Function) | \`$REPORTER_PID\` |" \
   "| \`CI_SP_ID\` (GitHub Actions; app ID \`$CI_APP_ID\`) | \`$CI_SP_ID\` |"
 
-echo ">> 1/9 WORM"
+echo ">> 1/10 WORM"
 say "" "## 1. Reports can't be changed or deleted" "" \
   "The \`reports\` container has a time-based retention (WORM) policy. A new probe blob is" \
   "written, then deleting it and overwriting it are both refused, for every identity. The" \
@@ -98,7 +98,7 @@ block 'az storage blob delete --account-name "$STG" --container-name reports --n
 block 'az storage blob upload --account-name "$STG" --container-name reports --name "$PROBE" --file "$TMP/overwrite.txt" --auth-mode login --overwrite -o none'
 block 'az storage blob show --account-name "$STG" --container-name reports --name "$PROBE" --auth-mode login --query "{name:name, created:properties.creationTime, lastModified:properties.lastModified}" -o table'
 
-echo ">> 2/9 report trace (downloads every POA&M and SAR)"
+echo ">> 2/10 report trace (downloads every POA&M and SAR)"
 say "" "## 2. Every report number traces to a stored query" "" \
   "Each report in the WORM container, re-checked against the evidence store today with its" \
   "own collection run:" \
@@ -191,7 +191,7 @@ if orphans:
           "holds, before the collector kept every run. See docs/INCIDENT-001-REPORT-LINEAGE.md.")
 PY
 
-echo ">> 3/9 collection lineage"
+echo ">> 3/10 collection lineage"
 say "" "## 3. Collection lineage" "" \
   "The newest collection run, what it wrote, and one of its documents with its run" \
   "stamps. Also the document count in each container." ""
@@ -235,7 +235,7 @@ if latest:
         print("```")
 PY
 
-echo ">> 4/9 live deny tests"
+echo ">> 4/10 live deny tests"
 say "" "## 4. The preventive controls fire" "" \
   "Two live attempts to create a storage account that breaks a Deny policy. The first" \
   "allows public blob access (\`cge-deny-public-blob\`); the second declares no minimum" \
@@ -258,20 +258,20 @@ for name in "$DENY_NAME" "$TLS_NAME"; do
   fi
 done
 
-echo ">> 5/9 CI gate"
+echo ">> 5/10 CI gate"
 GATE_RUN=$(gh run list --repo "$GH_REPO" --workflow compliance-gate --branch gate-test-public-storage \
   --limit 1 --json databaseId --jq '.[0].databaseId' 2>/dev/null)
 say "" "## 5. The gate blocks non-compliant changes" "" \
   "[PR #1](https://github.com/$GH_REPO/pull/1) added a public, shared-key storage" \
   "account on purpose. The gate failed it, naming each rule and resource, and it was" \
-  "closed unmerged. Branch protection requires all four gate checks on \`main\`, for" \
+  "closed unmerged. Branch protection requires every gate check on \`main\`, for" \
   "admins too."
 block 'gh pr view 1 --repo "$GH_REPO" --json title,state,mergedAt,closedAt --jq "{title, state, mergedAt, closedAt}"'
 block 'gh pr checks 1 --repo "$GH_REPO" || true'
 block 'gh run view "$GATE_RUN" --repo "$GH_REPO" --log-failed | grep -E "FAIL|[0-9]+ tests?," | sed -E "s/^.*[0-9]Z //"'
 block 'gh api "repos/$GH_REPO/branches/main/protection" --jq "{required_checks: .required_status_checks.contexts, enforce_admins: .enforce_admins.enabled}"'
 
-echo ">> 6/9 remediation"
+echo ">> 6/10 remediation"
 SEED_ID=$(az storage account list --resource-group rg-grc-sandbox-dev --query "[?starts_with(name, 'stgrcseed')].id | [0]" -o tsv)
 say "" "## 6. Repairs wait for a human, then run as the remediation identity" "" \
   "Stage 06 runs in dry-run: the Modify assignment doesn't enforce, so nothing changes until" \
@@ -282,7 +282,7 @@ block 'az policy assignment show --name cge-fix-public-blob --scope /providers/M
 block 'az policy remediation list --resource-group rg-grc-sandbox-dev --query "[].{name:name, state:provisioningState, created:createdOn, createdBy:systemData.createdBy, succeeded:deploymentStatus.successfulDeployments, failed:deploymentStatus.failedDeployments}" -o table'
 block "az monitor activity-log list --resource-id \"\$SEED_ID\" --offset 89d --query \"[?operationName.value=='Microsoft.Storage/storageAccounts/write' && status.value=='Succeeded'].{time:eventTimestamp, caller:caller}\" -o table"
 
-echo ">> 7/9 drift detection"
+echo ">> 7/10 drift detection"
 WS_ID=$(az monitor log-analytics workspace show --resource-group rg-grc-sandbox-dev --workspace-name law-grc-sandbox --query customerId -o tsv)
 KQL="AzureActivity | where TimeGenerated > ago(7d) | where CategoryValue == 'Administrative' and ActivityStatusValue in~ ('Success', 'Succeeded') | where OperationNameValue endswith '/WRITE' or OperationNameValue endswith '/DELETE' | summarize changes = count() by Caller | order by changes desc"
 say "" "## 7. Drift detection in both directions" "" \
@@ -301,7 +301,7 @@ say "" "**Who is touching Azure?** Successful administrative writes and deletes 
   "\`$KQL\`"
 block 'az monitor log-analytics query --workspace "$WS_ID" --analytics-query "$KQL" -o table'
 
-echo ">> 8/9 policy compliance"
+echo ">> 8/10 policy compliance"
 say "" "## 8. Policy compliance right now" "" \
   "Counts by policy and state for the baseline initiative and the stage 06 repair policy," \
   "then every resource my own three controls evaluate."
@@ -312,7 +312,7 @@ if [ -f "$HOME/control3-tls-evidence.txt" ]; then
   { printf '\n```text\n'; cat "$HOME/control3-tls-evidence.txt"; printf '```\n'; } >> "$RAW"
 fi
 
-echo ">> 9/9 identity whitelists"
+echo ">> 9/10 identity whitelists"
 say "" "## 9. What each pipeline identity is allowed to do" "" \
   "Live role assignments (control plane) for each pipeline identity, then the Cosmos" \
   "data-plane grants."
@@ -321,6 +321,16 @@ block 'az role assignment list --assignee "$REPORTER_PID" --all --query "[].{rol
 block 'az role assignment list --assignee "$REMEDIATION_PID" --all --query "[].{role:roleDefinitionName, scope:scope}" -o table'
 block 'az role assignment list --assignee "$CI_SP_ID" --all --query "[].{role:roleDefinitionName, scope:scope}" -o table'
 block 'az cosmosdb sql role assignment list --account-name "$COSMOS_NAME" --resource-group rg-grc-evidence-dev --query "[].{principal:principalId, role:roleDefinitionId}" -o table'
+
+echo ">> 10/10 framework crosswalk"
+say "" "## 10. The framework crosswalk is data, and it is checked" "" \
+  "Every control in [CONTROLS.md](CONTROLS.md) is a row in the \`mappings\` container, seeded" \
+  "by [\`seed_mappings.py\`](../labs/04-evidence/seed_mappings.py). Below is what" \
+  "\`seed_mappings.py --report\` reads back: coverage by CSF 2.0 category, joined to the" \
+  "category catalog in the \`frameworks\` container, then the checks. Every mapped category" \
+  "must be in the catalog, every mapped control must point at a file that exists, and the" \
+  "store must agree with CONTROLS.md category by category." ""
+"$PY" "$REPO_ROOT/labs/04-evidence/seed_mappings.py" --report >> "$RAW" 2>&1
 
 echo ">> Redacting and checking"
 LOCAL="${EMAIL%@*}"
@@ -347,4 +357,6 @@ echo "Wrote docs/EVIDENCE.md ($(wc -l < "$OUT") lines)."
 echo "  WORM refusals, expect 2 (the delete and the overwrite): $(grep -c 'BlobImmutableDueToPolicy' "$OUT")"
 echo "  Deny refusals, expect 2 (one per test): $(grep -c '^Code: RequestDisallowedByPolicy' "$OUT")"
 echo "  $(grep -E '^[0-9]+ of [0-9]+ reports whose collection run' "$OUT" || echo 'Report trace: no reports found')"
+echo "  $(grep -E '^[0-9]+ controls mapped to |^The mappings container is empty' "$OUT" || echo 'Crosswalk: no coverage line')"
+echo "  $(grep -E '^Crosswalk check passed|^The crosswalk check found problems' "$OUT" || echo 'Crosswalk check: no verdict')"
 echo "Read it before you commit it."

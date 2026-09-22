@@ -4,6 +4,10 @@ Every policy, collector, report generator and gate rule in this repo, mapped to 
 NIST CSF 2.0 category it serves. "Effect today" is what is in force right now. Every
 Audit or Deny effect, and stage 06's remediation mode, is a Terraform variable, so
 changing one is a reviewed, one-line pull request.
+The same mapping is stored as data: each control below is one row in the evidence
+database's `mappings` container, seeded by
+[`seed_mappings.py`](../labs/04-evidence/seed_mappings.py), which refuses to seed when
+this page and the seeder's table disagree.
 Live proof for anything on this page is in [EVIDENCE.md](EVIDENCE.md), and the reasons
 behind the design are in [ARCHITECTURE.md](ARCHITECTURE.md).
 
@@ -83,6 +87,7 @@ the code next to each policy.
 | `drift-detection` workflow (nightly, 08:00 UTC) | Azure no longer matching the code, in all five stages. A drifted stage opens a GitHub issue labeled `drift`, with the owner email redacted, and fails the run; so does a plan that errors, so a broken detector can't pass | [drift.yml](../.github/workflows/drift.yml) | DE.CM |
 | Control-plane change alert (hourly) | Emails the owner within about an hour of any successful administrative write or delete, then mutes for six hours; the Activity Log keeps every change with its caller, and the evidence page counts them by caller | [monitoring.tf](../stages/01-foundation/monitoring.tf), [EVIDENCE.md](EVIDENCE.md#7-drift-detection-in-both-directions) | DE.CM, DE.AE |
 | Evidence script | Regenerates the proof page from live output and refuses to publish personal identifiers. In CI the owner email is a secret, so run logs mask it | [capture-evidence.sh](../scripts/capture-evidence.sh) | GV.OV |
+| Framework crosswalk | This page and the stored crosswalk disagreeing, or a mapped control whose code is gone. Every control on this page is a row in the `mappings` container; `guide-ci` goes red on a pull request that changes one without the other, and the evidence page reads coverage back from the store | [seed_mappings.py](../labs/04-evidence/seed_mappings.py), [guide-ci.yml](../.github/workflows/guide-ci.yml) | GV.OV |
 
 ## My three controls
 
@@ -154,9 +159,10 @@ Found by testing the pipeline's own guardrails rather than by a policy scan.
 Control-level gaps I know about. Pipeline-level ones are in
 [ARCHITECTURE.md](ARCHITECTURE.md#known-gaps-and-trade-offs).
 
-- **The crosswalk isn't built yet.** The `mappings` container is empty, so findings
-  aren't yet mapped to CSF 2.0 categories as data. The course left this for its
-  optional Stage 5.
+- **The crosswalk maps controls, not findings.** Every control on this page is a row in
+  the `mappings` container, but individual Defender findings aren't mapped, so a POA&M
+  item doesn't yet say which CSF 2.0 category it affects. Defender's own CSF 2.0
+  standard (stage 02) scores the subscription in the meantime.
 - **Some findings have no severity.** For some assessments (12 of 33 open findings in
   the 2026-09-20 run), the collector found no severity in Defender's metadata catalog
   or on the assessment itself. They show as Unknown and get the POA&M's default 90-day
