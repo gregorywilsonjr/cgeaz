@@ -256,7 +256,7 @@ gh api -X PUT "repos/$GH_REPO/branches/main/protection" --input - <<'EOT'
 {
   "required_status_checks": {
     "strict": false,
-    "contexts": ["gate (01-foundation)", "gate (02-activation)", "gate (03-evidence-store)", "gate (04-reporting)", "gate (06-enforcement)"]
+    "contexts": ["tier0", "gate (01-foundation)", "gate (02-activation)", "gate (03-evidence-store)", "gate (04-reporting)", "gate (06-enforcement)"]
   },
   "enforce_admins": true,
   "required_pull_request_reviews": null,
@@ -270,7 +270,7 @@ protect, only identifiers. The one exception is `OWNER_EMAIL`, a secret because 
 is personal data: GitHub masks secrets in run logs but never masks variables, and
 a public repository's logs are public. `DEPLOYER_OBJECT_ID` names you as the deployer in CI's
 plans, so they match the plans you run. Forks start with their workflows switched
-off, which is why the three `enable` calls are there. Branch protection makes all five
+off, which is why the three `enable` calls are there. Branch protection makes `tier0` and all five
 gate checks required on `main`, for admins too. To prove the gate works, open a pull
 request that adds a public storage account: the gate must fail it. Mine is
 [PR #1](https://github.com/gregorywilsonjr/cgeaz/pull/1), closed unmerged.
@@ -407,7 +407,14 @@ Additions:
 - **A fix at the source for my own finding.** The owner-tag control flagged the
   state resource group, so [`bootstrap.sh`](labs/03-foundation/bootstrap.sh) now
   tags it with an owner ([PR #4](https://github.com/gregorywilsonjr/cgeaz/pull/4)).
-- **Branch protection** that requires all five gate checks, for admins too.
+- **Branch protection** that requires `tier0` and all five gate checks, for admins too.
+- **Tier 0 on every pull request,** with no credentials: `terraform fmt` and `validate`,
+  tflint, checkov and the crosswalk check, each tool pinned
+  ([gate.yml](.github/workflows/gate.yml)). checkov's first run found four things worth
+  fixing, fixed in [PR #18](https://github.com/gregorywilsonjr/cgeaz/pull/18). It also
+  couldn't read the two files that define every policy; they parse now, and `tier0` fails if
+  any file doesn't. Every other finding is accepted with its reason in
+  [.checkov.yaml](.checkov.yaml).
 - **The second detector, scheduled.** Drift detection asks whether Azure still
   matches the code; this asks who changed it. The Activity Log routing came from a
   script, and the who-changed-what query was run by hand. Both now live in stage 01:

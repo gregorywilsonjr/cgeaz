@@ -122,10 +122,12 @@ exception to "shared keys off."
 ## How a change reaches Azure
 
 1. I make the change on a branch and open a pull request.
-2. The `compliance-gate` workflow plans stages 01, 02, 03, 04 and 06 as the GitHub
+2. The `compliance-gate` workflow runs two kinds of check. `tier0` needs no
+   credentials: `terraform fmt` and `validate`, tflint, checkov and the crosswalk
+   check. The `gate` matrix plans stages 01, 02, 03, 04 and 06 as the GitHub
    identity, then runs `conftest` with the rules in [`policy/`](../policy) against
-   each plan. All five checks are required on `main`, with no admin bypass.
-3. I merge (squash) only when all five pass.
+   each plan. All six checks are required on `main`, with no admin bypass.
+3. I merge (squash) only when all six pass.
 4. I run `terraform apply` for the changed stage from my machine. CI plans; it
    never applies.
 5. Every night `drift-detection` plans the same five stages with

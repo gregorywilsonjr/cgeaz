@@ -53,8 +53,9 @@ resource "azurerm_policy_definition" "fix_public_blob" {
   mode                = "Indexed"
   management_group_id = local.mg_id
 
+  # "if" is quoted so checkov can parse this file; unquoted, its parser reads a keyword.
   policy_rule = jsonencode({
-    if = {
+    "if" = {
       allOf = [
         { field = "type", equals = "Microsoft.Storage/storageAccounts" },
         { field = "Microsoft.Storage/storageAccounts/allowBlobPublicAccess", notEquals = "false" }

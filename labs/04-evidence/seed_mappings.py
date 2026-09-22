@@ -59,6 +59,7 @@ CROSSWALK = [
     ("detector", "activity-log-to-workspace", ["DE.CM", "PR.PS"], "stages/01-foundation/monitoring.tf"),
     # Pipeline controls: the repo's own guardrails
     ("gate", "compliance-gate-branch-protection", ["PR.PS", "GV.PO"], ".github/workflows/gate.yml"),
+    ("gate", "tier0-static-checks", ["PR.PS"], ".github/workflows/gate.yml"),
     ("gate-rule", "storage-rego", ["PR.DS"], "policy/storage.rego"),
     ("gate-rule", "policy-identity-rego", ["PR.PS"], "policy/policy_identity.rego"),
     ("gate-rule", "broad-roles-rego", ["PR.AA"], "policy/broad_roles.rego"),

@@ -69,3 +69,75 @@ jobs:
           echo "${CONFTEST_SHA256}  conftest.tgz" | sha256sum -c -
           tar xzf conftest.tgz conftest
           ./conftest test --no-color "stages/${STAGE}/plan.json" -p policy
+
+  # Tier 0: static checks that need no Azure credentials and no state, on every pull request.
+  # It sits outside the gate matrix and its vars.AZURE_CLIENT_ID guard, so it also runs on a
+  # fork that hasn't been armed. Every tool is pinned, and tflint is checksummed like conftest.
+  tier0:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      TF_PLUGIN_CACHE_DIR: ${{ github.workspace }}/.tf-plugin-cache
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_wrapper: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: terraform fmt
+        run: terraform fmt -check -recursive stages
+
+      - name: terraform validate, every stage (no backend, no credentials)
+        run: |
+          mkdir -p "$TF_PLUGIN_CACHE_DIR"
+          for s in stages/*/; do
+            echo "== $s"
+            ( cd "$s" && terraform init -backend=false -input=false > /dev/null && terraform validate -no-color )
+          done
+
+      - name: tflint
+        env:
+          TFLINT_VERSION: "0.64.0"
+          TFLINT_SHA256: "cca9d13e2e1d7a2c627af60ff899a3c9b74212899416aeb96ec764d2ef954537"
+        run: |
+          curl -sSLo tflint.zip "https://github.com/terraform-linters/tflint/releases/download/v${TFLINT_VERSION}/tflint_linux_amd64.zip"
+          echo "${TFLINT_SHA256}  tflint.zip" | sha256sum -c -
+          unzip -o -q tflint.zip tflint
+          for s in stages/*/; do
+            echo "== $s"
+            ( cd "$s" && "$GITHUB_WORKSPACE/tflint" --config="$GITHUB_WORKSPACE/.tflint.hcl" --no-color )
+          done
+
+      - name: checkov (accepted findings are in .checkov.yaml, or inline next to the resource)
+        env:
+          CHECKOV_VERSION: "3.3.19"
+        run: |
+          python -m pip install --quiet "checkov==${CHECKOV_VERSION}"
+          checkov --config-file .checkov.yaml
+          checkov --config-file .checkov.yaml --soft-fail -o json > checkov.json
+          python - <<'PY'
+          # --quiet (set in .checkov.yaml) keeps only failed checks in the result lists, so the
+          # counts come from the summary, which checkov always writes.
+          import json
+          data = json.load(open("checkov.json"))
+          reports = data if isinstance(data, list) else [data]
+          total = {"passed": 0, "failed": 0, "skipped": 0, "parsing_errors": 0, "resource_count": 0}
+          for r in reports:
+              for k in total:
+                  total[k] += (r.get("summary") or {}).get(k, 0)
+          print("checkov: {passed} passed, {failed} failed, {skipped} skipped, {parsing_errors} parsing errors, {resource_count} resources".format(**total))
+          if total["parsing_errors"]:
+              print(f"::error::checkov could not parse {total['parsing_errors']} file(s), so nothing in them was checked")
+          if not total["resource_count"]:
+              print("::error::checkov scanned no resources")
+          raise SystemExit(1 if total["parsing_errors"] or not total["resource_count"] else 0)
+          PY
+
+      - name: the crosswalk agrees with CONTROLS.md and the code
+        run: python labs/04-evidence/seed_mappings.py --check

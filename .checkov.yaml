@@ -1,0 +1,32 @@
+# checkov, as run by the tier0 job in .github/workflows/gate.yml.
+# Anything not skipped here or inline must pass, so a new finding fails the pull request that
+# introduces it. A skip here is a decision that holds for this whole sandbox. A skip that holds
+# for one resource sits in that resource as a "#checkov:skip=ID:reason" comment instead, so
+# the same check still runs on every other resource. docs/CONTROLS.md summarizes both.
+directory:
+  - stages
+framework:
+  - terraform
+compact: true
+quiet: true
+skip-check:
+  # No customer-managed keys: storage and Cosmos DB encrypt at rest with Microsoft-managed
+  # keys. CMK needs Key Vault, key rotation and a plan for a lost key, none of which this
+  # sandbox has.
+  - CKV2_AZURE_1
+  - CKV_AZURE_100
+  # No private networking: consumption (Y1) Function Apps can't join a virtual network, so the
+  # storage accounts, Cosmos DB and the apps keep public endpoints and rely on Entra ID. The
+  # evidence storage and Cosmos DB accept no keys, and every pipeline caller is a managed
+  # identity; the Functions runtime's own storage is the one documented exception.
+  - CKV2_AZURE_33
+  - CKV_AZURE_59
+  - CKV_AZURE_99
+  - CKV_AZURE_101
+  - CKV_AZURE_221
+  # Locally redundant storage: one region, one sandbox. Geo-replication is a cost decision.
+  - CKV_AZURE_206
+  # Classic Storage Analytics logging: this pipeline keeps no queues of its own, and read access
+  # to the reports container isn't logged, which is a known gap in docs/CONTROLS.md.
+  - CKV_AZURE_33
+  - CKV2_AZURE_21

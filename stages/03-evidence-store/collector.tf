@@ -5,6 +5,9 @@
 # Internal plumbing storage for the Functions runtime (NOT the evidence store —
 # that account has shared keys disabled; this one is the app's own scratch space).
 resource "azurerm_storage_account" "func_internal" {
+  #checkov:skip=CKV2_AZURE_40:the Functions host signs in to its runtime storage with a key, the exception policy/storage.rego documents
+  #checkov:skip=CKV2_AZURE_41:runtime storage the Functions host manages; nothing in it is evidence
+  #checkov:skip=CKV2_AZURE_38:runtime storage the Functions host manages; nothing in it is evidence
   name                            = "stgrcfunc${random_string.suffix.result}"
   resource_group_name             = local.evidence_rg
   location                        = var.functions_location
@@ -16,6 +19,8 @@ resource "azurerm_storage_account" "func_internal" {
 }
 
 resource "azurerm_service_plan" "collectors" {
+  #checkov:skip=CKV_AZURE_212:a consumption (Y1) plan has no minimum instance count
+  #checkov:skip=CKV_AZURE_225:a consumption (Y1) plan can't be zone redundant
   name                = "asp-grc-collectors-${var.environment}"
   resource_group_name = local.evidence_rg
   location            = var.functions_location
