@@ -61,6 +61,7 @@ CROSSWALK = [
     ("gate", "compliance-gate-branch-protection", ["PR.PS", "GV.PO"], ".github/workflows/gate.yml"),
     ("gate", "tier0-static-checks", ["PR.PS"], ".github/workflows/gate.yml"),
     ("gate-rule", "storage-rego", ["PR.DS"], "policy/storage.rego"),
+    ("state", "terraform-state-storage", ["PR.AA", "PR.DS"], "labs/03-foundation/bootstrap.sh"),
     ("gate-rule", "policy-identity-rego", ["PR.PS"], "policy/policy_identity.rego"),
     ("gate-rule", "broad-roles-rego", ["PR.AA"], "policy/broad_roles.rego"),
     ("detector", "terraform-drift", ["DE.CM"], ".github/workflows/drift.yml"),

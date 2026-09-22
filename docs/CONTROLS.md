@@ -83,12 +83,13 @@ the code next to each policy.
 | `compliance-gate` workflow and branch protection | Nothing merges to `main` until `tier0` passes and stages 01, 02, 03, 04 and 06 plan cleanly and pass every rule below; admins included | [gate.yml](../.github/workflows/gate.yml) | PR.PS, GV.PO |
 | `tier0` job (every pull request, no credentials) | Unformatted or invalid Terraform, tflint findings (recommended preset), checkov findings, a file checkov can't parse, and a crosswalk that disagrees with this page. Each accepted checkov finding carries its reason in [.checkov.yaml](../.checkov.yaml) or next to the resource | [gate.yml](../.github/workflows/gate.yml) | PR.PS |
 | `storage.rego` | A Terraform storage account that allows public blob access, or shared keys outside the Function runtime exception | [storage.rego](../policy/storage.rego) | PR.DS |
+| Terraform state storage | State read with an account key, or lost to a delete. The account accepts Entra ID sign-in only, so reading or writing state takes a blob data role, not a key; it keeps every version, and a deleted state file or the container can be restored for 7 days. It is in no plan, so `storage.rego` never sees it | [bootstrap.sh](../labs/03-foundation/bootstrap.sh), [EVIDENCE.md](EVIDENCE.md#9-what-each-pipeline-identity-is-allowed-to-do) | PR.AA, PR.DS |
 | `policy_identity.rego` | A policy assignment without an identity, whose remediation would silently never run. Audit-only assignments that need none, such as `nist-csf-20`, are listed in the rule as data, each one a reviewed exception | [policy_identity.rego](../policy/policy_identity.rego) | PR.PS |
 | `broad_roles.rego` | An Owner or Contributor role assignment in Terraform | [broad_roles.rego](../policy/broad_roles.rego) | PR.AA |
 | `drift-detection` workflow (nightly, 08:00 UTC) | Azure no longer matching the code, in all five stages. A drifted stage opens a GitHub issue labeled `drift`, with the owner email redacted, and fails the run; so does a plan that errors, so a broken detector can't pass | [drift.yml](../.github/workflows/drift.yml) | DE.CM |
 | Control-plane change alert (hourly) | Emails the owner within about an hour of any successful administrative write or delete, then mutes for six hours; the Activity Log keeps every change with its caller, and the evidence page counts them by caller | [monitoring.tf](../stages/01-foundation/monitoring.tf), [EVIDENCE.md](EVIDENCE.md#7-drift-detection-in-both-directions) | DE.CM, DE.AE |
 | Evidence script | Regenerates the proof page from live output and refuses to publish personal identifiers. In CI the owner email is a secret, so run logs mask it | [capture-evidence.sh](../scripts/capture-evidence.sh) | GV.OV |
-| Framework crosswalk | This page and the stored crosswalk disagreeing, or a mapped control whose code is gone. Every control on this page is a row in the `mappings` container; `guide-ci` goes red on a pull request that changes one without the other, and the evidence page reads coverage back from the store | [seed_mappings.py](../labs/04-evidence/seed_mappings.py), [guide-ci.yml](../.github/workflows/guide-ci.yml) | GV.OV |
+| Framework crosswalk | This page and the stored crosswalk disagreeing, or a mapped control whose code is gone. Every control on this page is a row in the `mappings` container; `tier0` goes red on any pull request that changes one without the other, and the evidence page reads coverage back from the store | [seed_mappings.py](../labs/04-evidence/seed_mappings.py), [gate.yml](../.github/workflows/gate.yml) | GV.OV |
 
 ## My three controls
 
@@ -169,6 +170,9 @@ Control-level gaps I know about. Pipeline-level ones are in
   Function Apps can't join a virtual network, so the evidence services keep public endpoints
   and rely on Entra ID), no customer-managed keys, locally redundant storage, and no classic
   storage logging. Read access to the `reports` container isn't logged, which is a real gap.
+  Azure Policy flags the Terraform state account for the same missing private networking
+  (private link, virtual network rules), and there a firewall would also lock out CI, whose
+  GitHub-hosted runners have no fixed address to allow.
 - **The crosswalk maps controls, not findings.** Every control on this page is a row in
   the `mappings` container, but individual Defender findings aren't mapped, so a POA&M
   item doesn't yet say which CSF 2.0 category it affects. Defender's own CSF 2.0

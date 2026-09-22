@@ -89,9 +89,11 @@ A $10-a-month budget that emails you at 80% of actual spend and 100% of forecast
 export TF_VAR_state_storage_account=$(grep storage_account_name labs/03-foundation/backend.hcl | cut -d'"' -f2)
 ```
 
-Creates `rg-grc-tfstate` with a versioned storage account for Terraform state,
-grants you blob data access to it, and writes `labs/03-foundation/backend.hcl`,
-which every stage's `terraform init` reads. If the next `init` fails with a 403, the
+Creates `rg-grc-tfstate` with a storage account for Terraform state that accepts
+Entra ID sign-in only (no shared keys), keeps every version of each state file, and
+can restore a deleted state file or the container for 7 days. It grants you blob data
+access to it and writes `labs/03-foundation/backend.hcl`, which every stage's
+`terraform init` reads. If the next `init` fails with a 403, the
 new role is still propagating: wait a few minutes and run it again.
 
 ### 3. Foundation (stage 01)
@@ -407,6 +409,13 @@ Additions:
 - **A fix at the source for my own finding.** The owner-tag control flagged the
   state resource group, so [`bootstrap.sh`](labs/03-foundation/bootstrap.sh) now
   tags it with an owner ([PR #4](https://github.com/gregorywilsonjr/cgeaz/pull/4)).
+- **The state account held to the pipeline's own standard.** `storage.rego` fails any
+  storage account in a plan that accepts shared keys, but the state account is in no
+  plan, and it accepted them. With keys on, any role that can list them, CI's
+  Contributor included, could read state without a data-plane role.
+  [`bootstrap.sh`](labs/03-foundation/bootstrap.sh) now creates it keyless, with 7-day
+  soft delete for state files and the container beside the versioning it already had,
+  and the live account has the same settings.
 - **Branch protection** that requires `tier0` and all five gate checks, for admins too.
 - **Tier 0 on every pull request,** with no credentials: `terraform fmt` and `validate`,
   tflint, checkov and the crosswalk check, each tool pinned

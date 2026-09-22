@@ -28,9 +28,11 @@ a denied deployment.
 export ARM_SUBSCRIPTION_ID=$(az account show --query id -o tsv)
 ```
 
-Creates the state resource group, a **versioned** storage account, the `tfstate`
-container, and grants you `Storage Blob Data Contributor` — because Terraform state
-access is **data plane** and Owner alone gets a 403 (the 01_02 lesson, live).
+Creates the state resource group, a **versioned** storage account that accepts
+**Entra ID sign-in only** (shared keys off) and can restore a deleted state file or
+container for 7 days, the `tfstate` container, and grants you `Storage Blob Data
+Contributor` — because Terraform state access is **data plane** and Owner alone gets a
+403 (the 01_02 lesson, live).
 It also writes `backend.hcl` for every stage to share.
 
 **Expected output** (abridged; the storage-account suffix is derived from your
@@ -38,8 +40,8 @@ subscription ID, so yours differs):
 
 ```
 >> State resource group: rg-grc-tfstate
->> State storage account: stgrctfstateXXXXXXXX (versioned, no public blob access)
->> Enabling blob versioning (every state change becomes a recoverable version)
+>> State storage account: stgrctfstateXXXXXXXX (Entra ID only, no public blob access)
+>> Versioning and 7-day soft delete (every state change is kept, and a deleted state file or container can be restored)
 >> State container: tfstate
 >> Granting you Storage Blob Data Contributor on the state resource group
    Note: a fresh role grant can take 1-2 minutes to propagate before terraform init works.
@@ -71,7 +73,8 @@ terraform init -backend-config=../../labs/03-foundation/backend.hcl
 > **If a command hangs on `Acquiring state lock…` and never returns**, a previous
 > `terraform` run was interrupted and left a lock on the state blob. Take the lock ID
 > from the error and run `terraform force-unlock <ID>`, or break the blob lease on the
-> state file (`az storage blob lease break`). Only do this when no other run is active.
+> state file (`az storage blob lease break` with `--auth-mode login`, because the account
+> accepts no keys). Only do this when no other run is active.
 
 **Success signal:** `Terraform has been successfully initialized!`
 
