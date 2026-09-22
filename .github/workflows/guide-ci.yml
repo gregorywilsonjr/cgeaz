@@ -39,6 +39,10 @@ jobs:
       - name: validate guide code blocks and links
         run: ./labs/00-setup/ci/extract-and-validate.sh
 
+      # docs/CONTROLS.md and the crosswalk in the evidence store must say the same thing.
+      - name: the crosswalk agrees with CONTROLS.md and the code
+        run: python3 labs/04-evidence/seed_mappings.py --check
+
   parse-canary:
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest

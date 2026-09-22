@@ -168,6 +168,7 @@ python3 -m venv ~/cge-venv
 . ~/cge-venv/bin/activate
 pip install azure-cosmos azure-identity
 COSMOS_ENDPOINT=$(cd "$CGEAZ/stages/03-evidence-store" && terraform output -raw cosmos_endpoint) python3 seed_frameworks.py
+COSMOS_ENDPOINT=$(cd "$CGEAZ/stages/03-evidence-store" && terraform output -raw cosmos_endpoint) python3 seed_mappings.py
 cd "$CGEAZ"
 ```
 
@@ -178,8 +179,9 @@ alone can take several minutes. It defaults to `eastus2` because East US often h
 no Cosmos capacity for new subscriptions; if it fails with `ServiceUnavailable`,
 set `TF_VAR_location` to another region and apply again. The code deploy builds the
 Python dependencies in Azure, so it holds the terminal for a few minutes. The seed
-script loads seven NIST CSF 2.0 documents into the `frameworks` container. If it
-fails with an authorization error, your new Cosmos role is still propagating.
+scripts load seven NIST CSF 2.0 documents into the `frameworks` container and the
+crosswalk, one row per control in [CONTROLS.md](docs/CONTROLS.md), into `mappings`. If
+one fails with an authorization error, your new Cosmos role is still propagating.
 
 ### 7. Reporting (stage 04)
 
@@ -412,6 +414,11 @@ Additions:
   the routing adopted with `terraform import` rather than recreated, and an hourly
   alert that emails the owner when something changed; its query names who changed it
   ([monitoring.tf](stages/01-foundation/monitoring.tf)).
+- **The framework crosswalk, as data.** Every control in [CONTROLS.md](docs/CONTROLS.md)
+  is a row in the evidence store's `mappings` container, with its CSF 2.0 categories and
+  the file that implements it ([seed_mappings.py](labs/04-evidence/seed_mappings.py)).
+  The seeder refuses to write rows that disagree with CONTROLS.md, `guide-ci` runs the
+  same check on pull requests, and the evidence page reads coverage back from the store.
 - **A live evidence page** ([EVIDENCE.md](docs/EVIDENCE.md)) built from real command
   output by [`scripts/capture-evidence.sh`](scripts/capture-evidence.sh). The script
   redacts personal identifiers and refuses to write the page if any slip through.

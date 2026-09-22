@@ -8,14 +8,13 @@ Run once after deploying stages/03-evidence-store:
         python3 seed_frameworks.py
 
 Authenticates as YOU (az login) — the deployer's Cosmos data role comes from the stage.
-The mappings container gets its crosswalk rows in Domain 5's lab.
+The crosswalk goes into the mappings container with seed_mappings.py, next to this file,
+which reads its category catalog from CSF2_FUNCTIONS below. The Azure SDK is imported
+inside main() so that catalog loads without it: seed_mappings.py --check runs in CI.
 """
 
 import os
 import sys
-
-from azure.cosmos import CosmosClient
-from azure.identity import DefaultAzureCredential
 
 CSF2_FUNCTIONS = {
     "GV": ("Govern", ["GV.OC", "GV.RM", "GV.RR", "GV.PO", "GV.OV", "GV.SC"]),
@@ -32,6 +31,9 @@ def main() -> int:
     if not endpoint:
         print("Set COSMOS_ENDPOINT (see docstring).", file=sys.stderr)
         return 1
+
+    from azure.cosmos import CosmosClient
+    from azure.identity import DefaultAzureCredential
 
     container = (
         CosmosClient(endpoint, DefaultAzureCredential())
