@@ -50,6 +50,9 @@ resource "azurerm_linux_function_app" "reporting" {
   storage_account_name       = azurerm_storage_account.func_internal.name
   storage_account_access_key = azurerm_storage_account.func_internal.primary_access_key
 
+  # Plain HTTP is redirected to HTTPS, like the collector (checkov CKV_AZURE_70).
+  https_only = true
+
   identity {
     type = "SystemAssigned"
   }
