@@ -80,7 +80,8 @@ the code next to each policy.
 
 | Control | What it prevents or catches | Code | CSF 2.0 |
 |---|---|---|---|
-| `compliance-gate` workflow and branch protection | Nothing merges to `main` until stages 01, 02, 03, 04 and 06 plan cleanly and pass every rule below; admins included | [gate.yml](../.github/workflows/gate.yml) | PR.PS, GV.PO |
+| `compliance-gate` workflow and branch protection | Nothing merges to `main` until `tier0` passes and stages 01, 02, 03, 04 and 06 plan cleanly and pass every rule below; admins included | [gate.yml](../.github/workflows/gate.yml) | PR.PS, GV.PO |
+| `tier0` job (every pull request, no credentials) | Unformatted or invalid Terraform, tflint findings (recommended preset), checkov findings, a file checkov can't parse, and a crosswalk that disagrees with this page. Each accepted checkov finding carries its reason in [.checkov.yaml](../.checkov.yaml) or next to the resource | [gate.yml](../.github/workflows/gate.yml) | PR.PS |
 | `storage.rego` | A Terraform storage account that allows public blob access, or shared keys outside the Function runtime exception | [storage.rego](../policy/storage.rego) | PR.DS |
 | `policy_identity.rego` | A policy assignment without an identity, whose remediation would silently never run. Audit-only assignments that need none, such as `nist-csf-20`, are listed in the rule as data, each one a reviewed exception | [policy_identity.rego](../policy/policy_identity.rego) | PR.PS |
 | `broad_roles.rego` | An Owner or Contributor role assignment in Terraform | [broad_roles.rego](../policy/broad_roles.rego) | PR.AA |
@@ -145,7 +146,7 @@ found and how that was closed.
 
 ## Pipeline findings
 
-Found by testing the pipeline's own guardrails rather than by a policy scan.
+Found by testing the pipeline's own guardrails, or by its own scanners, rather than by Azure Policy.
 
 | Guardrail | Finding | Severity | Fix | Confirmed |
 |---|---|---|---|---|
@@ -153,12 +154,21 @@ Found by testing the pipeline's own guardrails rather than by a policy scan.
 | `drift-detection` | A plan that errored opened no issue and passed | Medium | An error and found drift each fail the run with their own message | Controlled drift test, recorded in [EVIDENCE.md](EVIDENCE.md#7-drift-detection-in-both-directions) |
 | CI run logs | `OWNER_EMAIL` was a repository variable, so every run printed it in each step's environment, on a public repo | Low | Stored as a secret, which GitHub masks | Run logs show `***` from 2026-09-21 |
 | `guide-ci` | Never enabled on the fork, so the docs check and the nightly canary had never run | Low | Enabled, and the README's arming step now enables all three workflows | First run green, 2026-09-21 |
+| checkov (tier0) | Couldn't parse `policies.tf` or stage 06's `main.tf`: a bare `if` key reads as a keyword to its HCL parser, so the files that define every policy were never scanned | Medium | Quote the key, and fail `tier0` on any file checkov can't parse | 0 parsing errors, 2026-09-22 |
+| checkov, first run | Both Function Apps accepted plain HTTP, so `collect_now`'s function key could travel in the clear | Medium | `https_only = true` ([PR #18](https://github.com/gregorywilsonjr/cgeaz/pull/18)) | `httpsOnly` true on both apps, 2026-09-22 |
+| checkov, first run | Account keys could still change Cosmos DB databases and containers, although local auth was off | Low | `access_key_metadata_writes_enabled = false` (#18) | `disableKeyBasedMetadataWriteAccess` true, 2026-09-22 |
+| checkov, first run | A blob deleted from the evidence account couldn't be restored | Low | Seven-day blob soft delete (#18) | Soft delete on, 7 days, 2026-09-22 |
 
 ## Limitations
 
 Control-level gaps I know about. Pipeline-level ones are in
 [ARCHITECTURE.md](ARCHITECTURE.md#known-gaps-and-trade-offs).
 
+- **Production controls this sandbox doesn't have.** checkov flags them, and each one is accepted
+  with its reason in [.checkov.yaml](../.checkov.yaml): no private networking (consumption
+  Function Apps can't join a virtual network, so the evidence services keep public endpoints
+  and rely on Entra ID), no customer-managed keys, locally redundant storage, and no classic
+  storage logging. Read access to the `reports` container isn't logged, which is a real gap.
 - **The crosswalk maps controls, not findings.** Every control on this page is a row in
   the `mappings` container, but individual Defender findings aren't mapped, so a POA&M
   item doesn't yet say which CSF 2.0 category it affects. Defender's own CSF 2.0

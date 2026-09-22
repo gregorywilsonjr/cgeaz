@@ -26,6 +26,7 @@ resource "azurerm_cosmosdb_account" "evidence" {
   # local_authentication_disabled was deprecated in favour of local_authentication_enabled
   # (removed in azurerm v5.0); the boolean inverts, so disabled=true becomes enabled=false.
   local_authentication_enabled = false
+  #checkov:skip=CKV_AZURE_140:false positive - the check reads azurerm 3.x local_authentication_disabled; in azurerm 4 it is local_authentication_enabled, false on the line above
 
   # Belt and braces with local auth off: account keys can't change databases, containers or
   # throughput either, so the schema changes only through Azure Resource Manager and its

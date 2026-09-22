@@ -1,5 +1,8 @@
 # Six policies (three from the course starter, three of my own), one initiative, assigned once at mg-grc-sandbox.
 # Every subscription that ever joins the sandbox group inherits all of it. (CSF: GV.PO, PR.DS, PR.PS)
+#
+# Each policy rule writes its first key as "if", in quotes. Unquoted, checkov's HCL parser reads
+# it as a keyword and can't scan this file at all. Terraform reads both spellings the same way.
 
 # --- 1. Require the `env` tag on resource groups (inventory hygiene; POA&M owner resolution) ---
 
@@ -19,7 +22,7 @@ resource "azurerm_policy_definition" "require_env_tag" {
   })
 
   policy_rule = jsonencode({
-    if = {
+    "if" = {
       allOf = [
         { field = "type", equals = "Microsoft.Resources/subscriptions/resourceGroups" },
         { field = "tags['env']", exists = "false" }
@@ -50,7 +53,7 @@ resource "azurerm_policy_definition" "deny_public_blob" {
   })
 
   policy_rule = jsonencode({
-    if = {
+    "if" = {
       allOf = [
         { field = "type", equals = "Microsoft.Storage/storageAccounts" },
         { field = "Microsoft.Storage/storageAccounts/allowBlobPublicAccess", equals = "true" }
@@ -81,7 +84,7 @@ resource "azurerm_policy_definition" "storage_diagnostics" {
   })
 
   policy_rule = jsonencode({
-    if = {
+    "if" = {
       field  = "type"
       equals = "Microsoft.Storage/storageAccounts"
     }
@@ -158,7 +161,7 @@ resource "azurerm_policy_definition" "cosmos_local_auth" {
   })
 
   policy_rule = jsonencode({
-    if = {
+    "if" = {
       allOf = [
         { field = "type", equals = "Microsoft.DocumentDB/databaseAccounts" },
         { field = "Microsoft.DocumentDB/databaseAccounts/disableLocalAuth", notEquals = true },
@@ -192,7 +195,7 @@ resource "azurerm_policy_definition" "require_owner_tag" {
   })
 
   policy_rule = jsonencode({
-    if = {
+    "if" = {
       allOf = [
         { field = "type", equals = "Microsoft.Resources/subscriptions/resourceGroups" },
         {
@@ -235,7 +238,7 @@ resource "azurerm_policy_definition" "storage_min_tls" {
   })
 
   policy_rule = jsonencode({
-    if = {
+    "if" = {
       allOf = [
         { field = "type", equals = "Microsoft.Storage/storageAccounts" },
         {
