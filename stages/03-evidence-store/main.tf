@@ -27,6 +27,11 @@ resource "azurerm_cosmosdb_account" "evidence" {
   # (removed in azurerm v5.0); the boolean inverts, so disabled=true becomes enabled=false.
   local_authentication_enabled = false
 
+  # Belt and braces with local auth off: account keys can't change databases, containers or
+  # throughput either, so the schema changes only through Azure Resource Manager and its
+  # RBAC (checkov CKV_AZURE_132).
+  access_key_metadata_writes_enabled = false
+
   capabilities {
     name = "EnableServerless"
   }
@@ -92,6 +97,12 @@ resource "azurerm_storage_account" "evidence" {
 
   blob_properties {
     versioning_enabled = true
+
+    # A deleted blob can be restored for seven days (checkov CKV2_AZURE_38). Blobs in
+    # `reports` can't be deleted at all while their retention policy holds.
+    delete_retention_policy {
+      days = 7
+    }
   }
 
   tags = local.common_tags

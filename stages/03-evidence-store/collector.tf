@@ -32,6 +32,10 @@ resource "azurerm_linux_function_app" "collectors" {
   storage_account_name       = azurerm_storage_account.func_internal.name
   storage_account_access_key = azurerm_storage_account.func_internal.primary_access_key
 
+  # Plain HTTP is redirected to HTTPS, so collect_now's function key never travels in the
+  # clear. Found by checkov (CKV_AZURE_70) on its first run.
+  https_only = true
+
   identity {
     type = "SystemAssigned"
   }
