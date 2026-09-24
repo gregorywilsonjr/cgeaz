@@ -344,6 +344,10 @@ by [`scripts/capture-evidence.sh`](scripts/capture-evidence.sh).
 | Drift detection runs every night | The `drift-detection` run history in this repo's Actions tab |
 | Run history builds up over time | Dated POA&M and SAR files in the `reports` container |
 | Controls of my own | Three policies, mapped to NIST CSF 2.0, in [CONTROLS.md](docs/CONTROLS.md) |
+| Nothing merges without the checks | Six required checks on every pull request, `tier0` plus the five gate stages, admins included ([EVIDENCE.md](docs/EVIDENCE.md), section 5) |
+| The crosswalk is data, not prose | Every control on this page is a row in the `mappings` container, checked on every pull request ([EVIDENCE.md](docs/EVIDENCE.md), section 10) |
+| A finding closes because the pipeline fixed it | Open findings fell after HTTPS-only Function Apps ([#18](https://github.com/gregorywilsonjr/cgeaz/pull/18)) and the keyless state account ([#20](https://github.com/gregorywilsonjr/cgeaz/pull/20)); the collections either side are both in the store ([EVIDENCE.md](docs/EVIDENCE.md), section 3) |
+| Someone changed Azure, and I heard about it | The change alert fired four times on 2026-09-21 and 2026-09-22, the last for the state-account change ([EVIDENCE.md](docs/EVIDENCE.md), section 7) |
 
 ## What I changed from the course starter
 
