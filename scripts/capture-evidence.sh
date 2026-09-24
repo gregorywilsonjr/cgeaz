@@ -318,8 +318,11 @@ say "" "**Who is touching Azure?** Successful administrative writes and deletes 
 block 'az monitor log-analytics query --workspace "$WS_ID" --analytics-query "$KQL" -o table'
 say "" "**The tripwire itself.** The alert runs that query every hour, emails the owner through" \
   "\`ag-grc-control-plane-changes\`, then stays quiet for six hours so a burst of changes sends" \
-  "one message rather than ten. Its settings, then every time it fired in the last 30 days:" \
-  "the last of them is the state account being hardened."
+  "one message rather than ten. Its settings, then every time it fired in the last 30 days." \
+  "Each fire lines up with a change somebody made on purpose: the four on 2026-09-21 and" \
+  "2026-09-22 are this pipeline being built, the last of them the state account being" \
+  "hardened. Any fire after those is the tag-only update in section 4 of this capture, which" \
+  "is the alert doing its job."
 block 'az resource show --ids "$ALERT_ID" --query "{enabled:properties.enabled, frequency:properties.evaluationFrequency, window:properties.windowSize, severity:properties.severity, muteFor:properties.muteActionsDuration}" -o table'
 block "az rest --method get --url \"https://management.azure.com/subscriptions/\$SUB_ID/providers/Microsoft.AlertsManagement/alerts?api-version=2019-03-01&timeRange=30d\" --query \"sort_by(value[?contains(properties.essentials.alertRule, 'alert-grc-control-plane-changes')].{fired:properties.essentials.startDateTime, condition:properties.essentials.monitorCondition}, &fired)\" -o table"
 
