@@ -52,8 +52,10 @@ REMEDIATION_PID=$(tf_out 01-foundation remediation_identity_principal_id)
 CI_APP_ID=$(az ad app list --display-name "github-cgeaz-${GH_REPO%%/*}" --query "[0].appId" -o tsv)
 CI_SP_ID=$(az ad sp show --id "$CI_APP_ID" --query id -o tsv 2>/dev/null)
 STATE_SA=$(az storage account list --resource-group rg-grc-tfstate --query "[0].name" -o tsv)
+LAST_PR=$(gh pr list --repo "$GH_REPO" --state merged --limit 1 --json number --jq '.[0].number')
+ALERT_ID=$(tf_out 01-foundation change_activity_alert_id)
 for v in GH_REPO SUB_ID TENANT_ID ME_ID STG COSMOS_NAME COSMOS_ENDPOINT COLLECTOR_PID \
-         REPORTER_PID REMEDIATION_PID CI_APP_ID CI_SP_ID STATE_SA; do
+         REPORTER_PID REMEDIATION_PID CI_APP_ID CI_SP_ID STATE_SA LAST_PR ALERT_ID; do
   if [ -z "${!v}" ]; then
     echo "Could not resolve $v. Are az and gh signed in, and is every stage initialised?" >&2
     exit 1
@@ -237,6 +239,12 @@ if latest:
         print("```")
 PY
 
+say "" "**Every run the store still holds.** A night the collector wrote nothing leaves a gap" \
+  "here rather than a wrong number: that day's POA&M names the run it was built from, which" \
+  "is the one before it. Open findings rose from 33 to 54 on 2026-09-21, when Defender first" \
+  "scanned the resources Labs 4 and 5 created, and fall again as fixes land." ""
+"$PY" "$REPO_ROOT/labs/04-evidence/run_history.py" >> "$RAW" 2>&1
+
 echo ">> 4/10 live deny tests"
 say "" "## 4. The preventive controls fire" "" \
   "Two live attempts to create a storage account that breaks a Deny policy. The first" \
@@ -272,6 +280,10 @@ block 'gh pr view 1 --repo "$GH_REPO" --json title,state,mergedAt,closedAt --jq 
 block 'gh pr checks 1 --repo "$GH_REPO" || true'
 block 'gh run view "$GATE_RUN" --repo "$GH_REPO" --log-failed | grep -E "FAIL|[0-9]+ tests?," | sed -E "s/^.*[0-9]Z //"'
 block 'gh api "repos/$GH_REPO/branches/main/protection" --jq "{required_checks: .required_status_checks.contexts, enforce_admins: .enforce_admins.enabled}"'
+say "" "Those same checks on the last pull request that did merge, #$LAST_PR. \`tier0\` runs the" \
+  "half that needs no credentials (\`terraform fmt\` and \`validate\`, tflint, checkov and the" \
+  "crosswalk check) and the gate matrix plans every stage as the GitHub identity."
+block 'gh pr checks "$LAST_PR" --repo "$GH_REPO" || true'
 
 echo ">> 6/10 remediation"
 SEED_ID=$(az storage account list --resource-group rg-grc-sandbox-dev --query "[?starts_with(name, 'stgrcseed')].id | [0]" -o tsv)
@@ -295,13 +307,21 @@ say "" "## 7. Drift detection in both directions" "" \
   "claim, so the trust failed closed (see \"CI couldn't sign in\" in" \
   "[the README](../README.md#what-i-changed-from-the-course-starter)). The red run on 2026-09-21" \
   "is the controlled drift test: a tag added to \`law-grc-sandbox\` outside Terraform was caught," \
-  "reported as issue #14 and removed through Terraform, and the run after it is clean."
+  "reported as issue #14 and removed through Terraform, and the run after it is clean. The green" \
+  "manual runs are checks, not padding: the one after the drift test, and the one on 2026-09-22" \
+  "that proved CI still reads Terraform state with the account's keys turned off."
 block 'gh run list --repo "$GH_REPO" --workflow drift-detection --limit 30 --json createdAt,event,conclusion --jq ".[] | \"\(.createdAt)  \(.event)  \(.conclusion)\""'
 block 'gh issue list --repo "$GH_REPO" --label drift --state all --limit 20 || true'
 say "" "**Who is touching Azure?** Successful administrative writes and deletes over the last" \
   "7 days, by caller, from the Activity Log in \`law-grc-sandbox\`. The query is:" \
   "\`$KQL\`"
 block 'az monitor log-analytics query --workspace "$WS_ID" --analytics-query "$KQL" -o table'
+say "" "**The tripwire itself.** The alert runs that query every hour, emails the owner through" \
+  "\`ag-grc-control-plane-changes\`, then stays quiet for six hours so a burst of changes sends" \
+  "one message rather than ten. Its settings, then every time it fired in the last 30 days:" \
+  "the last of them is the state account being hardened."
+block 'az resource show --ids "$ALERT_ID" --query "{enabled:properties.enabled, frequency:properties.evaluationFrequency, window:properties.windowSize, severity:properties.severity, muteFor:properties.muteActionsDuration}" -o table'
+block "az rest --method get --url \"https://management.azure.com/subscriptions/\$SUB_ID/providers/Microsoft.AlertsManagement/alerts?api-version=2019-03-01&timeRange=30d\" --query \"sort_by(value[?contains(properties.essentials.alertRule, 'alert-grc-control-plane-changes')].{fired:properties.essentials.startDateTime, condition:properties.essentials.monitorCondition}, &fired)\" -o table"
 
 echo ">> 8/10 policy compliance"
 say "" "## 8. Policy compliance right now" "" \

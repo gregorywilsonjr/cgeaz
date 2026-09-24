@@ -5,7 +5,7 @@ variable "location" {
 }
 
 variable "owner_email" {
-  description = "Owner tag applied to governed resource groups; the POA&M generator resolves finding owners from it."
+  description = "Owner tag applied to governed resource groups, and the address the control-plane change alert emails. The POA&M owner column does not resolve it yet (ARCHITECTURE.md, known gap 1)."
   type        = string
 }
 

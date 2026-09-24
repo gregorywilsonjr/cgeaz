@@ -159,6 +159,9 @@ Found by testing the pipeline's own guardrails, or by its own scanners, rather t
 | checkov, first run | Both Function Apps accepted plain HTTP, so `collect_now`'s function key could travel in the clear | Medium | `https_only = true` ([PR #18](https://github.com/gregorywilsonjr/cgeaz/pull/18)) | `httpsOnly` true on both apps, 2026-09-22 |
 | checkov, first run | Account keys could still change Cosmos DB databases and containers, although local auth was off | Low | `access_key_metadata_writes_enabled = false` (#18) | `disableKeyBasedMetadataWriteAccess` true, 2026-09-22 |
 | checkov, first run | A blob deleted from the evidence account couldn't be restored | Low | Seven-day blob soft delete (#18) | Soft delete on, 7 days, 2026-09-22 |
+| `storage.rego`, read against the state account | The Terraform state account is in no plan, so the gate never judged it, and it still accepted shared keys. State holds secrets, and any identity that can list those keys, as CI's Contributor role and the remediation identity's Storage Account Contributor both can, could read it without a data-plane role | Medium | [`bootstrap.sh`](../labs/03-foundation/bootstrap.sh) creates it keyless with 7-day soft delete, and the live account got the same settings ([PR #20](https://github.com/gregorywilsonjr/cgeaz/pull/20)) | Keys off and all five stages still plan, 2026-09-22; Defender's shared-key finding for the account closed in the 2026-09-24 collection |
+| Change alert, before it was applied | The first draft of the alert query filtered on `ResourceId`, a legacy `AzureActivity` column that many operations leave empty, so the tripwire could have watched and reported nothing | Medium | The query uses `_ResourceId`, and it was run against `law-grc-sandbox` before the pull request opened ([PR #16](https://github.com/gregorywilsonjr/cgeaz/pull/16)) | The pre-merge run returned 7 changes in 3 hours from 1 caller; the alert has since fired four times |
+| Nightly collection, 2026-09-23 | The 05:00 sweep ran but wrote no documents, so the store holds no run for that date. The 06:00 POA&M was built from the 2026-09-22 run and names it, so no report invented data | Low | The evidence page now lists every retained run, so a missing night is visible rather than silent. Recording a failed run needs telemetry these apps don't have yet, which is [known gap 6](ARCHITECTURE.md#known-gaps-and-trade-offs) | The Function App's metrics show one execution at 05:00 UTC that day, and `poam-2026-09-23.json` cites run `40e1919a` from 2026-09-22 |
 
 ## Limitations
 
@@ -173,6 +176,22 @@ Control-level gaps I know about. Pipeline-level ones are in
   Azure Policy flags the Terraform state account for the same missing private networking
   (private link, virtual network rules), and there a firewall would also lock out CI, whose
   GitHub-hosted runners have no fixed address to allow.
+- **What the built-in initiatives flag, and why this sandbox leaves it.** Azure Policy's
+  built-ins raise findings across the subscription in four groups: the missing private
+  networking above, on storage, Cosmos DB and the workspace; subscription-level Defender
+  plans and directory hygiene that one person on trial plans can't satisfy (a second owner,
+  a security contact, plans that bill after the trial); the region mismatch below; and
+  shared keys on the two Functions runtime accounts and the hand-made seed account, which
+  are the documented exceptions. Two more ask for an `activityLogAlerts` resource. This
+  pipeline answers the same question with an hourly log-search alert on `AzureActivity`
+  instead, which names who made each change rather than only that one happened.
+- **Resources sit outside their resource group's region.** The location audit flags both
+  Function Apps and their plans, the evidence storage account and Cosmos DB. A free
+  subscription has no consumption-plan quota in East US, so the Function tier runs in
+  `centralus`, and East US frequently has no Cosmos capacity, so the evidence store is in
+  `eastus2`, while their resource groups are in `eastus`. Both reasons are in the variable
+  descriptions that set them. Accepted: everything stays in the United States, and moving
+  a resource group would mean rebuilding the evidence store.
 - **The crosswalk maps controls, not findings.** Every control on this page is a row in
   the `mappings` container, but individual Defender findings aren't mapped, so a POA&M
   item doesn't yet say which CSF 2.0 category it affects. Defender's own CSF 2.0

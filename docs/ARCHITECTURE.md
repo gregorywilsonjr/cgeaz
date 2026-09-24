@@ -95,14 +95,14 @@ flowchart LR
 | 06:00 daily | POA&M | reporter Function App |
 | 07:00 daily | canary: `terraform validate` on every stage, no credentials | GitHub Actions |
 | 07:00 Mondays | SAR | reporter Function App |
-| 08:00 daily | drift detection | GitHub Actions |
+| 08:00 daily | drift detection. GitHub starts scheduled workflows when it has capacity, and these have landed 5 to 8 hours late | GitHub Actions |
 | every pull request | compliance gate | GitHub Actions |
 | every pull request that touches the docs | guide check: code blocks and links | GitHub Actions |
 
 ## Identity boundaries
 
 Every identity gets the roles its job needs, at the smallest scope that works, and
-no identity both records evidence and writes reports. Gaps 4 and 5 under
+no identity both records evidence and writes reports. Gaps 2 and 3 under
 [Known gaps](#known-gaps-and-trade-offs) are where this falls short.
 
 | Identity | Type | Roles (scope) | Its job | What it can't do |
@@ -202,3 +202,15 @@ This pipeline's own POA&M. Each item says what the fix would be.
 4. **The WORM policy is unlocked,** so the course teardown can delete it. In
    production I would lock it; after that, nobody can shorten or remove the
    retention period.
+5. **Production controls this sandbox doesn't have.** checkov names each one and
+   [.checkov.yaml](../.checkov.yaml) carries its reason: no private networking, no
+   customer-managed keys, locally redundant storage, no classic storage logging.
+   [CONTROLS.md](CONTROLS.md#limitations) lists them with what Azure Policy flags
+   for the same reasons. Fix: a virtual network, private endpoints and a Key Vault,
+   which a consumption-plan Function App can't join as it stands.
+6. **A failed collection leaves no trace.** Neither Function App has Application
+   Insights, so a nightly run that writes nothing shows only as an execution count
+   in the app's metrics: that is how the missing 2026-09-23 run was found. The
+   evidence page now lists every retained run so the gap is visible. Fix: enable
+   Application Insights, or have the collector write a run document even when it
+   writes no assessments.
