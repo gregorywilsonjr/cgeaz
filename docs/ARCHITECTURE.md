@@ -210,7 +210,10 @@ This pipeline's own POA&M. Each item says what the fix would be.
    which a consumption-plan Function App can't join as it stands.
 6. **A failed collection leaves no trace.** Neither Function App has Application
    Insights, so a nightly run that writes nothing shows only as an execution count
-   in the app's metrics: that is how the missing 2026-09-23 run was found. The
-   evidence page now lists every retained run so the gap is visible. Fix: enable
-   Application Insights, or have the collector write a run document even when it
-   writes no assessments.
+   in the app's metrics: that is how the missing 2026-09-23 run was found, and it
+   happened again on 2026-09-27. Two of nine nights wrote nothing and neither app
+   can say why, which is why the finding is Medium rather than Low. The evidence
+   page lists every retained run so a gap is visible, and every report names the
+   run it was built from, so no number is invented. Fix: enable Application
+   Insights, or have the collector write a run document even when it writes no
+   assessments.
