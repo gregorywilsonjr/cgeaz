@@ -294,7 +294,7 @@ say "" "## 6. Repairs wait for a human, then run as the remediation identity" ""
   "the sabotage before it and later fixes by hand show \`<owner>\`."
 block 'az policy assignment show --name cge-fix-public-blob --scope /providers/Microsoft.Management/managementGroups/mg-grc-sandbox --query "{name:name, enforcementMode:enforcementMode}" -o table'
 block 'az policy remediation list --resource-group rg-grc-sandbox-dev --query "[].{name:name, state:provisioningState, created:createdOn, createdBy:systemData.createdBy, succeeded:deploymentStatus.successfulDeployments, failed:deploymentStatus.failedDeployments}" -o table'
-block "az monitor activity-log list --resource-id \"\$SEED_ID\" --offset 89d --query \"[?operationName.value=='Microsoft.Storage/storageAccounts/write' && status.value=='Succeeded'].{time:eventTimestamp, caller:caller}\" -o table"
+block "az monitor activity-log list --resource-id \"\$SEED_ID\" --offset 89d --max-events 2000 --query \"[?operationName.value=='Microsoft.Storage/storageAccounts/write' && status.value=='Succeeded'].{time:eventTimestamp, caller:caller}\" -o table"
 
 echo ">> 7/10 drift detection"
 WS_ID=$(az monitor log-analytics workspace show --resource-group rg-grc-sandbox-dev --workspace-name law-grc-sandbox --query customerId -o tsv)
@@ -321,7 +321,7 @@ say "" "**The tripwire itself.** The alert runs that query every hour, emails th
   "one message rather than ten. Its settings, then every time it fired in the last 30 days." \
   "Each fire lines up with a change somebody made on purpose: the four on 2026-09-21 and" \
   "2026-09-22 are this pipeline being built, the last of them the state account being" \
-  "hardened. Any fire after those is the tag-only update in section 4 of this capture, which" \
+  "hardened. Any fire after those is the tag-only update every evidence capture makes (section 4), which" \
   "is the alert doing its job."
 block 'az resource show --ids "$ALERT_ID" --query "{enabled:properties.enabled, frequency:properties.evaluationFrequency, window:properties.windowSize, severity:properties.severity, muteFor:properties.muteActionsDuration}" -o table'
 block "az rest --method get --url \"https://management.azure.com/subscriptions/\$SUB_ID/providers/Microsoft.AlertsManagement/alerts?api-version=2019-03-01&timeRange=30d\" --query \"sort_by(value[?contains(properties.essentials.alertRule, 'alert-grc-control-plane-changes')].{fired:properties.essentials.startDateTime, condition:properties.essentials.monitorCondition}, &fired)\" -o table"
